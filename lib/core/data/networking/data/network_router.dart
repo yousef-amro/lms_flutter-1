@@ -1,7 +1,11 @@
 enum NetworkRouter {
   // Authentication
-  login(path: '/api/auth/login/'),
-  checkUpdate(path: '/api/shared/app/version/check/'),
+  login(path: '/api/v1/auth/login'),
+  checkUpdate(path: '/api/v1/auth/check-update'),
+  register(path: '/api/v1/auth/students'),
+  generations(path: '/api/v1/shared/generations'),
+  cities(path: '/api/v1/shared/cities'),
+  registerDevice(path: '/api/v1/general/fcm/register-token'),
 
   // Dashboard
   sensors(path: '/api/my-sensors/'),

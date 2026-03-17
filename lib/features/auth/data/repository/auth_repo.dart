@@ -1,6 +1,9 @@
 import 'package:dartz/dartz.dart' show Either;
 import 'package:lms_app/core/cache/local_storage_service.dart';
+import 'package:lms_app/core/domain/models/core_model.dart';
 import 'package:lms_app/core/domain/models/user_model.dart';
+import 'package:lms_app/features/auth/domain/models/request/register_device_request.dart';
+import 'package:lms_app/features/auth/domain/models/request/register_model.dart';
 
 import '../../../../core/cache/secure_storage_service.dart';
 import '../../../../core/domain/errors/failure.dart';
@@ -16,6 +19,10 @@ abstract class AuthRepositoryAbstraction {
   Future<void> setAccessTokenForResetPassword({String? accessToken});
   Future<void> setUserData(UserModel user);
   Future<void> clearAllTokens();
+  Future<Either<Failure, bool>> register(RegisterApiModel data);
+  Future<Either<Failure, List<CoreModel>>> fetchGenerations();
+  Future<Either<Failure, List<CoreModel>>> fetchCities();
+  Future<Either<Failure, void>> registerDevice(RegisterDeviceRequest request);
 }
 
 class AuthRepository implements AuthRepositoryAbstraction {
@@ -34,6 +41,18 @@ class AuthRepository implements AuthRepositoryAbstraction {
     String username,
     String password,
   ) => _remoteDataSource.manualLogin(username, password);
+
+  @override
+  Future<Either<Failure, bool>> register(RegisterApiModel data) =>
+      _remoteDataSource.register(data);
+
+  @override
+  Future<Either<Failure, List<CoreModel>>> fetchGenerations() =>
+      _remoteDataSource.fetchGenerations();
+
+  @override
+  Future<Either<Failure, List<CoreModel>>> fetchCities() =>
+      _remoteDataSource.fetchCities();
 
   @override
   Future<void> setAccessToken({
@@ -74,4 +93,8 @@ class AuthRepository implements AuthRepositoryAbstraction {
   Future<void> clearAllTokens() async {
     await _secureStorage.clearAllTokens();
   }
+
+  @override
+  Future<Either<Failure, void>> registerDevice(RegisterDeviceRequest request) =>
+      _remoteDataSource.registerDevice(request);
 }

@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 abstract class AppFonts {
   static const String cairo = 'Cairo';
   static const String inter = 'Inter';
+  // Compatibility with reference UI code
+  static const String ffShamelFamily = 'LamaSans';
+  static const String bahijTheSansArabic = 'LamaSans';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

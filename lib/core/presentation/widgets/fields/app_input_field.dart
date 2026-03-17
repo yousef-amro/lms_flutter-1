@@ -37,6 +37,8 @@ class AppInputField extends HookWidget {
     this.hasFillColor = false,
     this.textInputAction,
     this.textDirection,
+    this.obscureText,
+    this.onToggleObscureText,
   }) : assert(
          !(validOrEmptyRequired && validator == null),
          'If "validOrEmpty" is true, "validator" must be non null',
@@ -66,6 +68,8 @@ class AppInputField extends HookWidget {
     this.autovalidateMode,
     this.textDirection,
     this.textInputAction,
+    this.obscureText,
+    this.onToggleObscureText,
     this.inputBorder = const OutlineInputBorder(
       borderSide: BorderSide(color: Colors.transparent),
       borderRadius: BorderRadius.all(Radius.circular(5.0)),
@@ -105,12 +109,18 @@ class AppInputField extends HookWidget {
   final bool hasFillColor;
   final TextDirection? textDirection;
   final TextInputAction? textInputAction;
+  final bool? obscureText;
+  final VoidCallback? onToggleObscureText;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final obscureText = useState(keyboardType == TextInputType.visiblePassword);
+    final localObscureText = useState(
+      keyboardType == TextInputType.visiblePassword,
+    );
     final isError = useState(false);
+    final effectiveObscure =
+        obscureText ?? localObscureText.value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -157,7 +167,7 @@ class AppInputField extends HookWidget {
                     ? TextDirection.ltr
                     : null),
             maxLines: maxLines ?? (nullMaxLines ? null : 1),
-            obscureText: obscureText.value,
+            obscureText: effectiveObscure,
             inputFormatters: inputFormatters,
             textAlign: contentAlignment ?? TextAlign.start,
             obscuringCharacter: '*',
@@ -233,11 +243,12 @@ class AppInputField extends HookWidget {
                           suffix ??
                           (keyboardType == TextInputType.visiblePassword
                               ? IconButton(
-                                  onPressed: () =>
-                                      obscureText.value = !obscureText.value,
+                                  onPressed: onToggleObscureText ??
+                                      () => localObscureText.value =
+                                          !localObscureText.value,
 
                                   icon: Icon(
-                                    obscureText.value
+                                    effectiveObscure
                                         ? Iconsax.eye
                                         : Iconsax.eye_slash,
                                     size: 20,

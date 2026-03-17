@@ -47,6 +47,14 @@ class ColorManager {
   final Color disabled = const Color.fromARGB(255, 87, 87, 87);
   final Color border = const Color.fromARGB(255, 204, 204, 204);
 
+  // ========== Compatibility (reference auth UI) ==========
+  Color get primaryButton => primary;
+  Color get infoBlue => primary;
+  Color get hintGray => const Color.fromARGB(255, 160, 160, 160);
+  Color get textMuted => neutralDark.withValues(alpha: 0.65);
+  Color get titleDark => textDark;
+  Color get screenBgLight => scaffoldBackground;
+
   // ========== Color Scheme ==========
   Color get lightOnPrimary => white;
   Color get lightOnSurface => const Color.fromARGB(255, 42, 42, 42);

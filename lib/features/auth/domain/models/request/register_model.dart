@@ -1,28 +1,25 @@
 class RegisterApiModel {
-  final String firstName;
-  final String lastName;
+  final String fullName;
   final String mobileNumber;
-  final String otpCode;
-  final String storeName;
+  final String generation;
+  final String city;
   final String password;
 
   RegisterApiModel({
-    required this.firstName,
-    required this.lastName,
+    required this.fullName,
     required this.mobileNumber,
-    required this.otpCode,
-    required this.storeName,
+    required this.generation,
+    required this.city,
     required this.password,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      'first_name': firstName,
-      'last_name': lastName,
+      'full_name': fullName,
       'mobile_number': mobileNumber,
-      'otp_code': otpCode,
-      'store_name': storeName,
       'password': password,
+      'generation': generation,
+      'city': city,
     };
   }
 }

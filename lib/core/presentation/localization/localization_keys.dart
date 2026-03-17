@@ -55,6 +55,16 @@ class LocalizationKeys {
   static const internetFailure = 'internetFailure';
   static const providerDataFailed = 'providerDataFailed';
   static const signIn = 'signIn';
+  static const loginTitle = 'loginTitle';
+  static const loginAction = 'loginAction';
+  static const noAccountOnPlatformQ = 'noAccountOnPlatformQ';
+  static const createNewAccount = 'createNewAccount';
+  static const readyBanner = 'readyBanner';
+  static const passwordMinLengthHint = 'passwordMinLengthHint';
+  static const currentGeneration = 'currentGeneration';
+  static const currentGenerationHint = 'currentGenerationHint';
+  static const currentCityHint = 'currentCityHint';
+  static const registerConfirmSubscription = 'registerConfirmSubscription';
   static const alreadyHaveAccountQ = 'alreadyHaveAccountQ';
   static const permissionDenied = 'permissionDenied';
   static const sessionExpiredTitle = 'sessionExpiredTitle';
@@ -74,6 +84,12 @@ class LocalizationKeys {
       'authenticationRequiredButNoValidTokenAvailable';
   static const logoutError = 'logoutError';
   static const passwordsDoNotMatch = 'passwordsDoNotMatch';
+  static const registrationSuccessful = 'registrationSuccessful';
+  static const enterValidPhoneNumber = 'enterValidPhoneNumber';
+  static const createAccount = 'createAccount';
+  static const generation = 'generation';
+  static const selectGeneration = 'selectGeneration';
+  static const selectCity = 'selectCity';
   static const addAddress = 'addAddress';
   static const addressDetails = 'addressDetails';
   static const name = 'name';
@@ -120,6 +136,7 @@ class LocalizationKeys {
   static const logoutConfirmationMessage = 'logoutConfirmationMessage';
   static const stayLoggedIn = 'stayLoggedIn';
   static const fullName = 'fullName';
+  static const fullNameHint = 'fullNameHint';
   static const commercialRegister = 'commercialRegister';
   static const uploadCommercialRegister = 'uploadCommercialRegister';
   static const searchCategories = 'searchCategories';

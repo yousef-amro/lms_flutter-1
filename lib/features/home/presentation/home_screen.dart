@@ -13,33 +13,34 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.scaffoldBackground,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              _HomeTopBar(
-                title: 'سجل المحادثات',
-                onSearch: () {},
-              ),
-              const SizedBox(height: 16),
-              const _StatsSection(),
-              const SizedBox(height: 14),
-              const _FiltersRow(),
-              const SizedBox(height: 10),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  itemBuilder: (context, index) {
-                    final items = _demoChats();
-                    final item = items[index];
-                    return _ChatTile(item: item);
-                  },
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemCount: _demoChats().length,
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                _HomeTopBar(title: 'سجل المحادثات', onSearch: () {}),
+                const SizedBox(height: 16),
+                const _StatsSection(),
+                const SizedBox(height: 14),
+                const _FiltersRow(),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    itemBuilder: (context, index) {
+                      final items = _demoChats();
+                      final item = items[index];
+                      return _ChatTile(item: item);
+                    },
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 8),
+                    itemCount: _demoChats().length,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -71,7 +72,11 @@ class _HomeTopBar extends StatelessWidget {
                 color: colors.primary.withValues(alpha: 0.10),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.search, color: colors.primary, size: 20),
+              child: Icon(
+                Icons.search,
+                color: colors.primary,
+                size: 20,
+              ),
             ),
           ),
         ),
@@ -79,7 +84,9 @@ class _HomeTopBar extends StatelessWidget {
         Text(
           title,
           textAlign: TextAlign.right,
-          style: AppTypography.subheadingM.copyWith(color: colors.textDark),
+          style: AppTypography.subheadingM.copyWith(
+            color: colors.textDark,
+          ),
         ),
       ],
     );
@@ -155,7 +162,10 @@ class _StatCard extends StatelessWidget {
     final colors = ColorManager();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color: colors.cardBackground,
         borderRadius: BorderRadius.circular(14),
@@ -195,7 +205,10 @@ class _StatCard extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: iconBg,
+              shape: BoxShape.circle,
+            ),
             child: Icon(icon, color: iconFg, size: 18),
           ),
         ],
@@ -217,7 +230,10 @@ class _FiltersRow extends StatelessWidget {
           onPressed: () {},
           style: TextButton.styleFrom(
             foregroundColor: const Color(0xFF1FA971),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 6,
+              vertical: 8,
+            ),
           ),
           icon: const Icon(Icons.tune, size: 18),
           label: Text(
@@ -317,7 +333,10 @@ class _ChatTile extends StatelessWidget {
     final colors = ColorManager();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color: colors.cardBackground,
         borderRadius: BorderRadius.circular(16),
@@ -330,6 +349,7 @@ class _ChatTile extends StatelessWidget {
         ],
       ),
       child: Row(
+        textDirection: TextDirection.rtl,
         children: [
           _Avatar(isOnline: item.isOnline),
           const SizedBox(width: 12),
@@ -343,7 +363,8 @@ class _ChatTile extends StatelessWidget {
                       _UnreadBadge(count: item.unreadCount!),
                       const SizedBox(width: 8),
                     ],
-                    if (item.statusChip != null && item.statusColor != null) ...[
+                    if (item.statusChip != null &&
+                        item.statusColor != null) ...[
                       _StatusChip(
                         text: item.statusChip!,
                         color: item.statusColor!,
@@ -377,8 +398,11 @@ class _ChatTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTypography.bodyS.copyWith(
-                          color: colors.textDark.withValues(alpha: 0.65),
+                          color: colors.textDark.withValues(
+                            alpha: 0.65,
+                          ),
                         ),
+                        textDirection: TextDirection.rtl,
                       ),
                     ),
                   ],
@@ -390,7 +414,9 @@ class _ChatTile extends StatelessWidget {
                       Text(
                         item.timeText,
                         style: AppTypography.captionM.copyWith(
-                          color: colors.textDark.withValues(alpha: 0.50),
+                          color: colors.textDark.withValues(
+                            alpha: 0.50,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -398,7 +424,9 @@ class _ChatTile extends StatelessWidget {
                     Text(
                       item.dateText,
                       style: AppTypography.captionM.copyWith(
-                        color: colors.textDark.withValues(alpha: 0.50),
+                        color: colors.textDark.withValues(
+                          alpha: 0.50,
+                        ),
                       ),
                     ),
                     const Spacer(),
@@ -441,7 +469,10 @@ class _Avatar extends StatelessWidget {
             decoration: BoxDecoration(
               color: isOnline ? colors.safe : const Color(0xFF9CA3AF),
               shape: BoxShape.circle,
-              border: Border.all(color: colors.cardBackground, width: 2),
+              border: Border.all(
+                color: colors.cardBackground,
+                width: 2,
+              ),
             ),
           ),
         ),
@@ -464,7 +495,9 @@ class _UnreadBadge extends StatelessWidget {
       ),
       child: Text(
         '$count',
-        style: AppTypography.captionM.bold.copyWith(color: Colors.white),
+        style: AppTypography.captionM.bold.copyWith(
+          color: Colors.white,
+        ),
       ),
     );
   }
@@ -478,7 +511,10 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(999),
@@ -486,15 +522,20 @@ class _StatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.lock_outline, size: 14, color: Colors.white),
+          const Icon(
+            Icons.lock_outline,
+            size: 14,
+            color: Colors.white,
+          ),
           const SizedBox(width: 6),
           Text(
             text,
-            style: AppTypography.captionMCairo.copyWith(color: Colors.white),
+            style: AppTypography.captionMCairo.copyWith(
+              color: Colors.white,
+            ),
           ),
         ],
       ),
     );
   }
 }
-

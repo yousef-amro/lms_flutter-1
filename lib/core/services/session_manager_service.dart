@@ -36,8 +36,8 @@ class SessionManagerService {
       log('SessionManager: Handling session expiration. Reason: $reason');
 
       // Clear all stored tokens
-      _secureStorage.clearAllTokens();
-      _localStorage.clear();
+      await _secureStorage.clearAllTokens();
+      await _localStorage.clear();
 
       // Show session expired message to user
       await _showSessionExpiredMessage(reason);
@@ -98,7 +98,7 @@ class SessionManagerService {
 
       // Clear all stored tokens
       await _secureStorage.clearAllTokens();
-      _localStorage.clear();
+      await _localStorage.clear();
 
       // Show logout message if requested
       if (showMessage) {
@@ -147,7 +147,7 @@ class SessionManagerService {
   Future<void> clearUserData() async {
     try {
       await _secureStorage.clearAllTokens();
-      _localStorage.clear();
+      await _localStorage.clear();
       log('SessionManager: User data cleared successfully');
     } catch (e) {
       log('SessionManager: Error clearing user data: $e');

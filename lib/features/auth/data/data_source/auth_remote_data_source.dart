@@ -1,8 +1,6 @@
 import 'package:dartz/dartz.dart';
 import 'package:get/get.dart';
-import 'package:lms_app/core/domain/models/core_model.dart';
 import 'package:lms_app/features/auth/domain/models/request/register_device_request.dart';
-import 'package:lms_app/features/auth/domain/models/request/register_model.dart';
 
 import '../../../../core/data/networking/data/network_request.dart';
 import '../../../../core/data/networking/data/network_response.dart';
@@ -19,9 +17,6 @@ abstract class AuthRemoteDataSourceAbstraction {
     String username,
     String password,
   );
-  Future<Either<Failure, bool>> register(RegisterApiModel data);
-  Future<Either<Failure, List<CoreModel>>> fetchGenerations();
-  Future<Either<Failure, List<CoreModel>>> fetchCities();
   Future<Either<Failure, void>> registerDevice(RegisterDeviceRequest request);
 }
 
@@ -96,71 +91,6 @@ class AuthRemoteDataSource implements AuthRemoteDataSourceAbstraction {
     } else {
       return Left(response.failure!);
     }
-  }
-
-  @override
-  Future<Either<Failure, bool>> register(RegisterApiModel data) async {
-    final request = NetworkRequest(
-      route: NetworkRouter.register,
-      requestType: RequestType.post,
-      data: data.toJson(),
-    );
-    final response = await _networkAdapter.request(request);
-    if (response.status == NetworkResponseStatus.success) {
-      return const Right(true);
-    } else {
-      return Left(response.failure!);
-    }
-  }
-
-  @override
-  Future<Either<Failure, List<CoreModel>>> fetchGenerations() async {
-    final request = NetworkRequest(
-      route: NetworkRouter.generations,
-      requestType: RequestType.get,
-    );
-
-    final response = await _networkAdapter.request(request);
-    if (response.status == NetworkResponseStatus.success) {
-      final items = _extractList(response.data)
-          .whereType<Map<String, dynamic>>()
-          .map(CoreModel.fromJson)
-          .toList();
-      return Right(items);
-    } else {
-      return Left(response.failure!);
-    }
-  }
-
-  @override
-  Future<Either<Failure, List<CoreModel>>> fetchCities() async {
-    final request = NetworkRequest(
-      route: NetworkRouter.cities,
-      requestType: RequestType.get,
-    );
-
-    final response = await _networkAdapter.request(request);
-    if (response.status == NetworkResponseStatus.success) {
-      final items = _extractList(response.data)
-          .whereType<Map<String, dynamic>>()
-          .map(CoreModel.fromJson)
-          .toList();
-      return Right(items);
-    } else {
-      return Left(response.failure!);
-    }
-  }
-
-  List<dynamic> _extractList(dynamic data) {
-    if (data is List) return data;
-    if (data is Map<String, dynamic>) {
-      const keys = ['results', 'data', 'items', 'payload'];
-      for (final key in keys) {
-        final value = data[key];
-        if (value is List) return value;
-      }
-    }
-    return const [];
   }
 
   String _extractErrorMessage(dynamic responseData) {

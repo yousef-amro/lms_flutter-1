@@ -119,8 +119,24 @@ class AppInputField extends HookWidget {
       keyboardType == TextInputType.visiblePassword,
     );
     final isError = useState(false);
-    final effectiveObscure =
-        obscureText ?? localObscureText.value;
+    final effectiveObscure = obscureText ?? localObscureText.value;
+
+    final defaultBorderSide = BorderSide(
+      color: ColorManager().border,
+      width: 1,
+    );
+    final defaultRadius = BorderRadius.circular(30);
+    final defaultOutlineBorder = OutlineInputBorder(
+      borderSide: defaultBorderSide,
+      borderRadius: defaultRadius,
+    );
+    final defaultErrorBorder = OutlineInputBorder(
+      borderSide: BorderSide(
+        color: theme.colorScheme.error,
+        width: 1,
+      ),
+      borderRadius: defaultRadius,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -173,7 +189,8 @@ class AppInputField extends HookWidget {
             obscuringCharacter: '*',
             validator: (value) {
               if (validOrEmptyRequired) {
-                if (validator!(value ?? '') != null) isError.value = true;
+                if (validator!(value ?? '') != null)
+                  isError.value = true;
                 return validator!(value ?? '');
               }
               if (!required) return null;
@@ -188,38 +205,14 @@ class AppInputField extends HookWidget {
             },
             style: AppTypography.bodyS.bold,
             decoration: InputDecoration(
-              border:
-                  inputBorder ??
-                  OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.transparent),
-                    borderRadius: BorderRadius.all(Radius.circular(5.0)),
-                  ),
-
-              enabledBorder:
-                  inputBorder ??
-                  UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: ColorManager().primary,
-                      width: 2,
-                    ),
-                  ),
-              errorBorder:
-                  inputBorder ??
-                  UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: ColorManager().primary,
-                      width: 2,
-                    ),
-                  ),
-              disabledBorder:
-                  inputBorder ??
-                  UnderlineInputBorder(
-                    borderSide: BorderSide(
-                      color: ColorManager().primary,
-                      width: 2,
-                    ),
-                  ),
-              focusedBorder: focusedBorder,
+              border: inputBorder ?? defaultOutlineBorder,
+              enabledBorder: inputBorder ?? defaultOutlineBorder,
+              disabledBorder: inputBorder ?? defaultOutlineBorder,
+              focusedBorder:
+                  focusedBorder ??
+                  (inputBorder ?? defaultOutlineBorder),
+              errorBorder: inputBorder ?? defaultErrorBorder,
+              focusedErrorBorder: inputBorder ?? defaultErrorBorder,
               hintText: hint,
               suffixIconConstraints: const BoxConstraints(),
               prefixIconConstraints: const BoxConstraints(),
@@ -228,22 +221,36 @@ class AppInputField extends HookWidget {
                   : ColorManager().inputFill,
               filled: hasFillColor,
               prefixIcon: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsetsDirectional.only(
+                  start: 16,
+                  end: 8,
+                ),
                 child: prefix,
               ),
-              contentPadding: contentPadding,
+              isDense: true,
+              contentPadding:
+                  contentPadding ??
+                  const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 18,
+                  ),
               suffixIconColor: theme.colorScheme.onSurface,
               suffixIcon:
                   (suffix == null &&
                       keyboardType != TextInputType.visiblePassword)
                   ? null
                   : Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsetsDirectional.only(
+                        start: 8,
+                        end: 16,
+                      ),
                       child:
                           suffix ??
-                          (keyboardType == TextInputType.visiblePassword
+                          (keyboardType ==
+                                  TextInputType.visiblePassword
                               ? IconButton(
-                                  onPressed: onToggleObscureText ??
+                                  onPressed:
+                                      onToggleObscureText ??
                                       () => localObscureText.value =
                                           !localObscureText.value,
 

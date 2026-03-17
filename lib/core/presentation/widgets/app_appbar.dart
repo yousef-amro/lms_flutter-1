@@ -25,9 +25,10 @@ class AppAppbar extends StatelessWidget implements PreferredSizeWidget {
 }
 
 class AppStaticAppbar extends StatelessWidget {
-  const AppStaticAppbar({super.key, this.title});
+  const AppStaticAppbar({super.key, this.title, this.trailing});
 
   final String? title;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -39,41 +40,52 @@ class AppStaticAppbar extends StatelessWidget {
         children: [
           Padding(
             padding: EdgeInsetsGeometry.symmetric(horizontal: 20, vertical: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                AppClickable(
-                  onClick: () {
-                    if (Navigator.canPop(context)) {
-                      Navigator.of(context).pop();
-                    }
-                  },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.onPrimary,
-                      shape: BoxShape.circle,
-                    ),
-                    padding: 8.padding,
-                    child: Icon(
-                      Icons.arrow_back,
-                      color: ColorManager().black,
-                      size: 26,
-                    ),
-                  ),
-                ),
-                if (title != null)
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        title!,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+            child: Directionality(
+              // Keep back button on the left and trailing on the right,
+              // regardless of the app's current locale direction.
+              textDirection: TextDirection.ltr,
+              child: Row(
+                children: [
+                  AppClickable(
+                    onClick: () {
+                      if (Navigator.canPop(context)) {
+                        Navigator.of(context).pop();
+                      }
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.onPrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      padding: 8.padding,
+                      child: Icon(
+                        Icons.arrow_back,
+                        color: ColorManager().black,
+                        size: 26,
                       ),
                     ),
                   ),
-                SizedBox(width: 50),
-              ],
+                  Expanded(
+                    child: Center(
+                      child: title == null
+                          ? const SizedBox.shrink()
+                          : Text(
+                              title!,
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 50,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: trailing,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Divider(color: theme.colorScheme.onPrimary),

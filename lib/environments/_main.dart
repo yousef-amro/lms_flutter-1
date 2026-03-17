@@ -1,10 +1,12 @@
-import 'package:fl_country_code_picker/fl_country_code_picker.dart' as flc;
+import 'package:fl_country_code_picker/fl_country_code_picker.dart'
+    as flc;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:get/get.dart';
 import 'package:lms_app/core/domain/routing/app_navigator.dart';
 import 'package:lms_app/core/domain/routing/app_routes.dart';
+import 'package:lms_app/core/presentation/theme/color_manager.dart';
 
 import '../core/binding/network_core_binding.dart';
 import '../core/cache/local_storage_service.dart';
@@ -12,6 +14,7 @@ import '../core/cache/secure_storage_service.dart';
 import '../core/presentation/localization/app_localization.dart';
 import '../core/presentation/localization/language_registry.dart';
 import '../core/presentation/theme/app_theme.dart';
+import '../core/services/session_manager_service.dart';
 import '../core/utils/app_utils.dart';
 
 Future<void> mainApp() async {
@@ -68,7 +71,7 @@ class AppWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Sound Level',
+      title: 'LMS Call Center App',
       translations: AppLocalization(),
       debugShowCheckedModeBanner: false,
       locale: Locale(LocalStorageService().locale),
@@ -95,7 +98,42 @@ class AppWidget extends StatelessWidget {
                   child: child!,
                 ),
               );
-        return base;
+        return Stack(
+          children: [
+            base,
+            Positioned(
+              top: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 6, right: 6),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(999),
+                      onTap: () => Get.find<SessionManagerService>()
+                          .handleUserLogout(showMessage: true),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: ColorManager()
+                              .primary
+                              .withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(10),
+                        child: Icon(
+                          Icons.logout,
+                          color: ColorManager().primary,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
       },
     );
   }

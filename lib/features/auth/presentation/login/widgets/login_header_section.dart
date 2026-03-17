@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../components/login_hero.dart';
-import '../components/login_title.dart';
 
 class LoginHeaderSection extends StatelessWidget {
   const LoginHeaderSection({
@@ -21,11 +20,9 @@ class LoginHeaderSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        LoginHero(width: width - (56 * scale), heroAsset: heroAsset),
+        LoginHero(width: width, heroAsset: heroAsset),
         SizedBox(height: 25 * scale),
-        LoginTitle(title: title, scale: scale),
       ],
     );
   }
 }
-

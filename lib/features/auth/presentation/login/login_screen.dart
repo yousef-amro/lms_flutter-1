@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:lms_app/core/domain/constants/png_manager.dart';
-import 'package:lms_app/core/domain/routing/app_routes.dart';
 import 'package:lms_app/core/presentation/localization/localization_keys.dart';
 import 'package:lms_app/core/presentation/theme/color_manager.dart';
 
@@ -42,7 +41,7 @@ class LoginScreen extends HookWidget {
                         LoginHeaderSection(
                           width: contentWidth,
                           scale: scale,
-                          heroAsset: ImageManager().loginHero,
+                          heroAsset: ImageManager().loginHeader,
                           title: LocalizationKeys.loginTitle.tr,
                         ),
                         SizedBox(height: 28 * scale),
@@ -58,8 +57,6 @@ class LoginScreen extends HookWidget {
                             onTogglePasswordVisibility:
                                 controller.togglePasswordVisibility,
                             onLogin: () => controller.submitLogin(loginFormKey),
-                            onCreateAccount: () =>
-                                Get.toNamed(AppRoutes.register),
                             phoneValidator: (value) =>
                                 controller.phoneNumberValidator(value ?? ''),
                             passwordValidator: (value) =>

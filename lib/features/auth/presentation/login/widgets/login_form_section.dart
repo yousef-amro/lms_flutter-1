@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:lms_app/core/domain/constants/svg_manager.dart';
 import 'package:lms_app/core/presentation/localization/localization_keys.dart';
 import 'package:lms_app/core/presentation/theme/color_manager.dart';
-import 'package:lms_app/core/presentation/widgets/fields/app_input_field.dart';
 
 import '../components/login_actions_row.dart';
 import '../components/login_field_icon.dart';
 import '../components/login_input_label.dart';
 import '../components/login_phone_prefix.dart';
-import '../components/login_signup_row.dart';
+import '../components/login_text_field.dart';
 
 class LoginFormSection extends StatelessWidget {
   const LoginFormSection({
@@ -24,7 +22,6 @@ class LoginFormSection extends StatelessWidget {
     required this.isLoading,
     required this.onTogglePasswordVisibility,
     required this.onLogin,
-    required this.onCreateAccount,
     required this.phoneValidator,
     required this.passwordValidator,
   });
@@ -37,7 +34,6 @@ class LoginFormSection extends StatelessWidget {
   final bool isLoading;
   final VoidCallback onTogglePasswordVisibility;
   final VoidCallback onLogin;
-  final VoidCallback onCreateAccount;
   final String? Function(String?) phoneValidator;
   final String? Function(String?) passwordValidator;
 
@@ -45,7 +41,6 @@ class LoginFormSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final textDirection = Directionality.of(context);
     final isArabic = (Get.locale?.languageCode ?? '').toLowerCase() == 'ar';
-    final phoneTextAlign = isArabic ? TextAlign.right : TextAlign.left;
 
     return Form(
       key: formKey,
@@ -54,32 +49,25 @@ class LoginFormSection extends StatelessWidget {
         children: [
           LoginInputLabel(text: LocalizationKeys.mobileNumber.tr, scale: scale),
           SizedBox(height: 8 * scale),
-          AppInputField(
+          LoginTextField(
             controller: phoneController,
             keyboardType: TextInputType.phone,
             textDirection: TextDirection.ltr,
-            contentAlignment: phoneTextAlign,
-            maxLength: 10,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            hint: isArabic ? '\u200F07' : '07',
-            required: true,
-            validator: (value) => phoneValidator(value),
+            hintText: isArabic ? '\u200F07' : '07',
+            validator: phoneValidator,
             prefix: LoginPhonePrefix(scale: scale),
           ),
           SizedBox(height: 18 * scale),
           LoginInputLabel(text: LocalizationKeys.password.tr, scale: scale),
           SizedBox(height: 8 * scale),
-          AppInputField(
+          LoginTextField(
             controller: passwordController,
             keyboardType: TextInputType.visiblePassword,
             textDirection: textDirection,
             textInputAction: TextInputAction.done,
-            hint: LocalizationKeys.password.tr,
+            hintText: LocalizationKeys.password.tr,
             obscureText: obscurePassword,
-            onToggleObscureText: onTogglePasswordVisibility,
-            required: true,
-            validator: (value) => passwordValidator(value),
-            contentAlignment: TextAlign.start,
+            validator: passwordValidator,
             prefix: LoginFieldIcon(
               asset: SvgManager().loginIconLock,
               color: ColorManager().hintGray,
@@ -102,8 +90,6 @@ class LoginFormSection extends StatelessWidget {
           ),
           SizedBox(height: 30 * scale),
           LoginActionsRow(isLoading: isLoading, onLogin: onLogin, scale: scale),
-          SizedBox(height: 26 * scale),
-          LoginSignupRow(onCreateAccount: onCreateAccount, scale: scale),
         ],
       ),
     );

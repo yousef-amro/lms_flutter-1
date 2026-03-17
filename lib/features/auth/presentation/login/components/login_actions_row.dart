@@ -26,9 +26,9 @@ class LoginActionsRow extends StatelessWidget {
             child: ElevatedButton(
               onPressed: isLoading ? null : onLogin,
               style: ElevatedButton.styleFrom(
-                backgroundColor: ColorManager().primaryButton,
-                disabledBackgroundColor:
-                    ColorManager().primaryButton.withValues(alpha: 0.5),
+                backgroundColor: Color(0xFF3185ff),
+                disabledBackgroundColor: ColorManager().primaryButton
+                    .withValues(alpha: 0.5),
                 shape: const StadiumBorder(),
                 elevation: 0,
               ),
@@ -57,4 +57,3 @@ class LoginActionsRow extends StatelessWidget {
     );
   }
 }
-

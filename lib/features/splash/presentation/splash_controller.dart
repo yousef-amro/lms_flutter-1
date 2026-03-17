@@ -21,8 +21,9 @@ class SplashController extends GetxController with Alerts {
   void onInit() async {
     super.onInit();
     await Future.delayed(const Duration(seconds: 3));
-    Get.offNamed(AppRoutes.login);
-    // checkConnectivity();
+    // Decide initial route based on cached auth token (and optional update check).
+    // If you want connectivity + update flow, call `checkConnectivity()` instead.
+    await verifyToken();
   }
 
   void checkConnectivity() async {

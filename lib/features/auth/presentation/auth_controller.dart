@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lms_app/core/cache/local_storage_service.dart';
 import 'package:lms_app/core/domain/routing/app_routes.dart';
-import 'package:lms_app/features/auth/domain/models/request/register_model.dart';
 
 import '../../../core/domain/utils/alerts.dart';
-import '../../../core/domain/models/core_model.dart';
 import '../../../core/presentation/localization/localization_keys.dart';
 import '../../../core/services/session_manager_service.dart';
 import '../../../core/services/token_manager_service.dart';
@@ -22,7 +20,6 @@ class AuthController extends GetxController with Alerts {
   final LocalStorageService _localStorage;
 
   static const String loginScreenId = 'login_screen';
-  static const String registerScreenId = 'register_screen';
 
   final TextEditingController phoneController = TextEditingController(
     text: kDebugMode ? "0799090791" : "",
@@ -31,23 +28,6 @@ class AuthController extends GetxController with Alerts {
       TextEditingController(text: kDebugMode ? "Test@123" : "");
 
   bool obscurePassword = true;
-  bool registerObscurePassword = true;
-  bool registerObscureConfirmPassword = true;
-
-  final TextEditingController registerFullNameController =
-      TextEditingController(text: kDebugMode ? "Test User" : "");
-  final TextEditingController registerPhoneController =
-      TextEditingController(text: kDebugMode ? "0799090791" : "");
-  final TextEditingController registerPasswordController =
-      TextEditingController(text: kDebugMode ? "Test@123" : "");
-  final TextEditingController registerConfirmPasswordController =
-      TextEditingController(text: kDebugMode ? "Test@123" : "");
-
-  String? selectedGeneration;
-  String? selectedCity;
-  final List<CoreModel> generationOptions = [];
-  final List<CoreModel> cityOptions = [];
-  bool _isFetchingRegisterOptions = false;
 
   AuthController({
     required AuthRepositoryAbstraction repository,
@@ -68,72 +48,9 @@ class AuthController extends GetxController with Alerts {
   static const double _maxAuthContentWidth = 430.0;
   static const double _authDesignWidth = 393.0;
 
-  Future<void> fetchRegisterOptions({bool forceRefresh = false}) async {
-    if (_isFetchingRegisterOptions) return;
-    final hasCachedOptions =
-        generationOptions.isNotEmpty && cityOptions.isNotEmpty;
-    if (hasCachedOptions && !forceRefresh) return;
-
-    _isFetchingRegisterOptions = true;
-    try {
-      final generationsResponse = await _repository.fetchGenerations();
-      generationsResponse.fold(
-        (failure) => showFailSnackbar(text: failure.message),
-        (generations) {
-          generationOptions
-            ..clear()
-            ..addAll(generations);
-          if (selectedGeneration != null &&
-              generationOptions.every(
-                (generation) => generation.id != selectedGeneration,
-              )) {
-            selectedGeneration = null;
-          }
-        },
-      );
-
-      final citiesResponse = await _repository.fetchCities();
-      citiesResponse.fold(
-        (failure) => showFailSnackbar(text: failure.message),
-        (cities) {
-          cityOptions
-            ..clear()
-            ..addAll(cities);
-          if (selectedCity != null &&
-              cityOptions.every((city) => city.id != selectedCity)) {
-            selectedCity = null;
-          }
-        },
-      );
-    } finally {
-      _isFetchingRegisterOptions = false;
-      update([registerScreenId]);
-    }
-  }
-
   void togglePasswordVisibility() {
     obscurePassword = !obscurePassword;
     update([loginScreenId]);
-  }
-
-  void toggleRegisterPasswordVisibility() {
-    registerObscurePassword = !registerObscurePassword;
-    update([registerScreenId]);
-  }
-
-  void toggleRegisterConfirmPasswordVisibility() {
-    registerObscureConfirmPassword = !registerObscureConfirmPassword;
-    update([registerScreenId]);
-  }
-
-  void onGenerationChanged(String? value) {
-    selectedGeneration = value;
-    update([registerScreenId]);
-  }
-
-  void onCityChanged(String? value) {
-    selectedCity = value;
-    update([registerScreenId]);
   }
 
   double loginScreenWidth(BuildContext context) {
@@ -154,7 +71,7 @@ class AuthController extends GetxController with Alerts {
   }
 
   void _updateAuthScreens() {
-    update([loginScreenId, registerScreenId]);
+    update([loginScreenId]);
   }
 
   void submitLogin(GlobalKey<FormState> formKey) {
@@ -195,52 +112,12 @@ class AuthController extends GetxController with Alerts {
     }
   }
 
-  Future<void> register(RegisterApiModel data) async {
-    authState = AuthState.loading;
-    update([registerScreenId]);
-
-    final response = await _repository.register(data);
-    await response.fold(
-      (failure) {
-        authState = AuthState.failure;
-        showFailSnackbar(text: failure.message);
-        update([registerScreenId]);
-      },
-      (_) async {
-        showSuccessSnackbar(text: LocalizationKeys.registrationSuccessful.tr);
-        await login(
-          username: data.mobileNumber,
-          password: data.password,
-        );
-      },
-    );
-  }
-
-  Future<void> submitRegister(GlobalKey<FormState> formKey) async {
-    if (!(formKey.currentState?.validate() ?? false)) return;
-
-    await register(
-      RegisterApiModel(
-        fullName: registerFullNameController.text.trim(),
-        mobileNumber: registerPhoneController.text.trim(),
-        generation: selectedGeneration ?? '',
-        city: selectedCity ?? '',
-        password: registerPasswordController.text.trim(),
-      ),
-    );
-  }
-
   Future<void> continueAfterFunction({
     String? screen,
     required String mobileNumber,
   }) async {
     if (screen == "login") {
       Get.toNamed(AppRoutes.login, arguments: {'mobileNumber': mobileNumber});
-    } else if (screen == "register") {
-      Get.toNamed(
-        AppRoutes.login,
-        arguments: {'mobileNumber': mobileNumber, 'screen': 'register'},
-      );
     }
   }
 
@@ -267,29 +144,6 @@ class AuthController extends GetxController with Alerts {
   String? emptyValidator(String value) {
     if (value.isNotEmpty) return null;
     return LocalizationKeys.fieldRequired.tr;
-  }
-
-  String? registerPasswordValidator(String value) {
-    final password = value.trim();
-    if (password.isEmpty) return LocalizationKeys.fieldRequired.tr;
-
-    final confirmPassword = registerConfirmPasswordController.text.trim();
-    final hasMismatch =
-        confirmPassword.isNotEmpty && password != confirmPassword;
-    if (hasMismatch) return LocalizationKeys.passwordsDoNotMatch.tr;
-
-    return null;
-  }
-
-  String? registerConfirmPasswordValidator(String value) {
-    final confirmPassword = value.trim();
-    if (confirmPassword.isEmpty) return LocalizationKeys.fieldRequired.tr;
-
-    final password = registerPasswordController.text.trim();
-    final hasMismatch = password.isNotEmpty && password != confirmPassword;
-    if (hasMismatch) return LocalizationKeys.passwordsDoNotMatch.tr;
-
-    return null;
   }
 
   String? phoneNumberValidator(String value) {
@@ -372,10 +226,6 @@ class AuthController extends GetxController with Alerts {
   void onClose() {
     phoneController.dispose();
     passwordController.dispose();
-    registerFullNameController.dispose();
-    registerPhoneController.dispose();
-    registerPasswordController.dispose();
-    registerConfirmPasswordController.dispose();
     super.onClose();
   }
 }

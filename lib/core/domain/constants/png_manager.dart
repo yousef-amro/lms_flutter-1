@@ -11,5 +11,5 @@ class ImageManager {
   // Auth hero images (fallback to existing images)
   String get loginHero => 'assets/images/join-yotel-community.png';
   String get registerHero => 'assets/images/join-yotel-community.png';
+  String get loginHeader => 'assets/images/image.webp';
 }
-

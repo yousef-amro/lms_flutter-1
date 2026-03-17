@@ -113,7 +113,7 @@ class SplashController extends GetxController with Alerts {
       Get.offNamed(AppRoutes.login);
       return;
     } else {
-      Get.offNamed(AppRoutes.dashboard);
+      Get.offNamed(AppRoutes.home);
       return;
     }
   }

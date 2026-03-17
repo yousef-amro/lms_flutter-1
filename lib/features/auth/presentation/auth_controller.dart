@@ -138,7 +138,7 @@ class AuthController extends GetxController with Alerts {
     //   await Get.find<ProfileController>().fetchUser();
     // }
     _updateAuthScreens();
-    Get.offAllNamed(AppRoutes.dashboard);
+    Get.offAllNamed(AppRoutes.home);
   }
 
   String? emptyValidator(String value) {

@@ -1,0 +1,266 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:get/get.dart';
+import 'package:iconsax/iconsax.dart';
+import 'package:lms_app/core/domain/utils/extensions.dart';
+import 'package:lms_app/core/presentation/theme/text_manager.dart';
+
+import '../../localization/localization_keys.dart';
+import '../../theme/color_manager.dart';
+
+class AppInputField extends HookWidget {
+  const AppInputField({
+    super.key,
+    this.controller,
+    this.hint,
+    this.title,
+    this.keyboardType = TextInputType.text,
+    this.enabled = true,
+    this.validator,
+    this.nullMaxLines = false,
+    this.required = false,
+    this.maxLines,
+    this.errorText,
+    this.suffix,
+    this.prefix,
+    this.onTap,
+    this.validOrEmptyRequired = false,
+    this.contentAlignment,
+    this.inputFormatters,
+    this.onChanged,
+    this.maxLength,
+    this.contentPadding,
+    this.autovalidateMode,
+    this.inputBorder,
+    this.focusedBorder,
+    this.hasFillColor = false,
+    this.textInputAction,
+    this.textDirection,
+  }) : assert(
+         !(validOrEmptyRequired && validator == null),
+         'If "validOrEmpty" is true, "validator" must be non null',
+       );
+
+  const AppInputField.secondary({
+    super.key,
+    this.controller,
+    this.hint,
+    this.title,
+    this.contentPadding,
+    this.prefix,
+    this.keyboardType = TextInputType.text,
+    this.enabled = true,
+    this.validator,
+    this.required = false,
+    this.maxLines,
+    this.nullMaxLines = false,
+    this.errorText,
+    this.suffix,
+    this.onTap,
+    this.maxLength,
+    this.validOrEmptyRequired = false,
+    this.contentAlignment,
+    this.inputFormatters,
+    this.onChanged,
+    this.autovalidateMode,
+    this.textDirection,
+    this.textInputAction,
+    this.inputBorder = const OutlineInputBorder(
+      borderSide: BorderSide(color: Colors.transparent),
+      borderRadius: BorderRadius.all(Radius.circular(5.0)),
+    ),
+    this.focusedBorder = const OutlineInputBorder(
+      borderSide: BorderSide(color: Colors.transparent),
+      borderRadius: BorderRadius.all(Radius.circular(5.0)),
+    ),
+    this.hasFillColor = true,
+  }) : assert(
+         !(validOrEmptyRequired && validator == null),
+         'If "validOrEmpty" is true, "validator" must be non null',
+       );
+
+  final TextEditingController? controller;
+  final String? hint;
+  final String? title;
+  final TextInputType keyboardType;
+  final bool enabled;
+  final bool required;
+  final bool nullMaxLines;
+  final int? maxLines;
+  final String? Function(String)? validator;
+  final void Function(String)? onChanged;
+  final String? errorText;
+  final Widget? suffix;
+  final Widget? prefix;
+  final VoidCallback? onTap;
+  final TextAlign? contentAlignment;
+  final bool validOrEmptyRequired;
+  final EdgeInsets? contentPadding;
+  final List<TextInputFormatter>? inputFormatters;
+  final AutovalidateMode? autovalidateMode;
+  final InputBorder? inputBorder;
+  final InputBorder? focusedBorder;
+  final int? maxLength;
+  final bool hasFillColor;
+  final TextDirection? textDirection;
+  final TextInputAction? textInputAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final obscureText = useState(keyboardType == TextInputType.visiblePassword);
+    final isError = useState(false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (title != null) ...[
+          Row(
+            children: [
+              Text(title!, style: AppTypography.bodyS.bold),
+              if (required)
+                Text(
+                  ' *',
+                  style: AppTypography.bodyS.bold.copyWith(
+                    color: ColorManager().error,
+                  ),
+                ),
+            ],
+          ),
+          8.spaceY,
+        ],
+        GestureDetector(
+          onTap: onTap,
+          child: TextFormField(
+            key: key,
+            controller: controller,
+            onChanged: (value) {
+              if (onChanged != null) onChanged!(value);
+            },
+            maxLength: maxLength,
+            maxLengthEnforcement: MaxLengthEnforcement.enforced,
+            buildCounter:
+                (
+                  context, {
+                  required currentLength,
+                  required isFocused,
+                  required maxLength,
+                }) => SizedBox(),
+            onTapOutside: (_) => FocusScope.of(context).unfocus(),
+            keyboardType: keyboardType,
+            textInputAction: textInputAction ?? TextInputAction.next,
+            enabled: enabled,
+            autovalidateMode: autovalidateMode,
+            textDirection:
+                textDirection ??
+                (keyboardType == TextInputType.phone
+                    ? TextDirection.ltr
+                    : null),
+            maxLines: maxLines ?? (nullMaxLines ? null : 1),
+            obscureText: obscureText.value,
+            inputFormatters: inputFormatters,
+            textAlign: contentAlignment ?? TextAlign.start,
+            obscuringCharacter: '*',
+            validator: (value) {
+              if (validOrEmptyRequired) {
+                if (validator!(value ?? '') != null) isError.value = true;
+                return validator!(value ?? '');
+              }
+              if (!required) return null;
+              if (value case null || '') {
+                isError.value = true;
+                return LocalizationKeys.fieldRequired.tr;
+              }
+              if (validator case null) return null;
+              if (validator!(value) != null) isError.value = true;
+
+              return validator!(value);
+            },
+            style: AppTypography.bodyS.bold,
+            decoration: InputDecoration(
+              border:
+                  inputBorder ??
+                  OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.transparent),
+                    borderRadius: BorderRadius.all(Radius.circular(5.0)),
+                  ),
+
+              enabledBorder:
+                  inputBorder ??
+                  UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: ColorManager().primary,
+                      width: 2,
+                    ),
+                  ),
+              errorBorder:
+                  inputBorder ??
+                  UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: ColorManager().primary,
+                      width: 2,
+                    ),
+                  ),
+              disabledBorder:
+                  inputBorder ??
+                  UnderlineInputBorder(
+                    borderSide: BorderSide(
+                      color: ColorManager().primary,
+                      width: 2,
+                    ),
+                  ),
+              focusedBorder: focusedBorder,
+              hintText: hint,
+              suffixIconConstraints: const BoxConstraints(),
+              prefixIconConstraints: const BoxConstraints(),
+              fillColor: (isError.value || errorText != null)
+                  ? theme.colorScheme.error.withValues(alpha: 0.1)
+                  : ColorManager().inputFill,
+              filled: hasFillColor,
+              prefixIcon: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: prefix,
+              ),
+              contentPadding: contentPadding,
+              suffixIconColor: theme.colorScheme.onSurface,
+              suffixIcon:
+                  (suffix == null &&
+                      keyboardType != TextInputType.visiblePassword)
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child:
+                          suffix ??
+                          (keyboardType == TextInputType.visiblePassword
+                              ? IconButton(
+                                  onPressed: () =>
+                                      obscureText.value = !obscureText.value,
+
+                                  icon: Icon(
+                                    obscureText.value
+                                        ? Iconsax.eye
+                                        : Iconsax.eye_slash,
+                                    size: 20,
+                                  ),
+                                )
+                              : null),
+                    ),
+              hintStyle: AppTypography.bodyS.medium,
+              errorStyle: AppTypography.captionM.medium.copyWith(
+                color: theme.colorScheme.error,
+              ),
+              error: errorText != null && !isError.value
+                  ? Text(
+                      errorText!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

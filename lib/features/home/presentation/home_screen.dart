@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:lms_app/core/presentation/theme/color_manager.dart';
 import 'package:lms_app/core/presentation/theme/text_manager.dart';
+import 'package:lms_app/core/domain/routing/app_routes.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -20,7 +22,11 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 8),
-                _HomeTopBar(title: 'سجل المحادثات', onSearch: () {}),
+                _HomeTopBar(
+                  title: 'سجل المحادثات',
+                  onSearch: () {},
+                  onOpenLiveChat: () => Get.toNamed(AppRoutes.chatInbox),
+                ),
                 const SizedBox(height: 16),
                 const _StatsSection(),
                 const SizedBox(height: 14),
@@ -34,7 +40,7 @@ class HomeScreen extends StatelessWidget {
                       final item = items[index];
                       return _ChatTile(item: item);
                     },
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (context, index) =>
                         const SizedBox(height: 8),
                     itemCount: _demoChats().length,
                   ),
@@ -51,8 +57,13 @@ class HomeScreen extends StatelessWidget {
 class _HomeTopBar extends StatelessWidget {
   final String title;
   final VoidCallback onSearch;
+  final VoidCallback onOpenLiveChat;
 
-  const _HomeTopBar({required this.title, required this.onSearch});
+  const _HomeTopBar({
+    required this.title,
+    required this.onSearch,
+    required this.onOpenLiveChat,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +71,27 @@ class _HomeTopBar extends StatelessWidget {
 
     return Row(
       children: [
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: onOpenLiveChat,
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colors.primary.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.chat_bubble_outline,
+                color: colors.primary,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
         Material(
           color: Colors.transparent,
           child: InkWell(

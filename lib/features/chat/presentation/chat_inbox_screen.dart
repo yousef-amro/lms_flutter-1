@@ -1,0 +1,243 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+import '../../../core/presentation/theme/color_manager.dart';
+import '../../../core/presentation/theme/text_manager.dart';
+import 'controllers/chat_controller.dart';
+
+class ChatInboxScreen extends StatelessWidget {
+  const ChatInboxScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = ColorManager();
+    AppTypography.init();
+    final controller = Get.find<ChatController>();
+
+    return Scaffold(
+      backgroundColor: colors.scaffoldBackground,
+      appBar: AppBar(
+        backgroundColor: colors.scaffoldBackground,
+        elevation: 0,
+        title: Text(
+          'المحادثات المباشرة',
+          style: AppTypography.subheadingM.copyWith(color: colors.textDark),
+        ),
+      ),
+      body: Obx(() {
+        final connected = controller.isConnected.value;
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              _ConnectionCard(connected: connected),
+              const SizedBox(height: 10),
+              _WsDebugCard(
+                role: controller.role.value,
+                userId: controller.userId.value,
+                userName: controller.userName.value,
+                recentTypes: controller.recentEventTypes,
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: controller.incomingRequests.isEmpty
+                    ? Center(
+                        child: Text(
+                          'لا توجد طلبات محادثة حالياً',
+                          style: AppTypography.bodyM.copyWith(
+                            color: colors.textDark.withValues(alpha: 0.65),
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: controller.incomingRequests.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = controller.incomingRequests[index];
+                          final sessionId = item['session_id']?.toString() ?? '';
+                          final student = item['student'];
+                          final studentName = student is Map
+                              ? (student['full_name']?.toString() ?? 'طالب')
+                              : 'طالب';
+                          final nodeTitle =
+                              item['node_title']?.toString() ?? '';
+
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: colors.cardBackground,
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.03),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              textDirection: TextDirection.rtl,
+                              children: [
+                                const CircleAvatar(
+                                  backgroundColor: Color(0xFFE5E7EB),
+                                  child: Icon(
+                                    Icons.person,
+                                    color: Color(0xFF6B7280),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        studentName,
+                                        textAlign: TextAlign.right,
+                                        style: AppTypography.bodyM.bold.copyWith(
+                                          color: colors.textDark,
+                                        ),
+                                      ),
+                                      if (nodeTitle.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          nodeTitle,
+                                          textAlign: TextAlign.right,
+                                          style: AppTypography.captionM.copyWith(
+                                            color: colors.textDark.withValues(
+                                              alpha: 0.6,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                FilledButton(
+                                  onPressed: sessionId.isEmpty
+                                      ? null
+                                      : () async {
+                                          await controller.acceptChat(
+                                            sessionId: sessionId,
+                                          );
+                                          controller.openSession(sessionId);
+                                        },
+                                  child: const Text('قبول'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
+class _ConnectionCard extends StatelessWidget {
+  final bool connected;
+  const _ConnectionCard({required this.connected});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = ColorManager();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.cardBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: connected ? colors.safe.withValues(alpha: 0.25) : colors.error,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        textDirection: TextDirection.rtl,
+        children: [
+          Icon(
+            connected ? Icons.wifi : Icons.wifi_off,
+            color: connected ? colors.safe : colors.error,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              connected ? 'متصل بالخادم' : 'غير متصل، جاري إعادة المحاولة…',
+              textAlign: TextAlign.right,
+              style: AppTypography.bodyS.copyWith(color: colors.textDark),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WsDebugCard extends StatelessWidget {
+  final String? role;
+  final String? userId;
+  final String? userName;
+  final List<String> recentTypes;
+  const _WsDebugCard({
+    required this.role,
+    required this.userId,
+    required this.userName,
+    required this.recentTypes,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = ColorManager();
+    final typesText = recentTypes.isEmpty ? '—' : recentTypes.take(6).join(' • ');
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.cardBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            'WS Debug',
+            style: AppTypography.captionM.bold.copyWith(
+              color: colors.textDark.withValues(alpha: 0.75),
+            ),
+            textAlign: TextAlign.right,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'role: ${role ?? "—"}',
+            style: AppTypography.captionM.copyWith(
+              color: colors.textDark.withValues(alpha: 0.75),
+            ),
+            textAlign: TextAlign.right,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'user: ${(userName ?? "—")} (${userId ?? "—"})',
+            style: AppTypography.captionM.copyWith(
+              color: colors.textDark.withValues(alpha: 0.75),
+            ),
+            textAlign: TextAlign.right,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'events: $typesText',
+            style: AppTypography.captionM.copyWith(
+              color: colors.textDark.withValues(alpha: 0.70),
+            ),
+            textAlign: TextAlign.right,
+          ),
+        ],
+      ),
+    );
+  }
+}
+

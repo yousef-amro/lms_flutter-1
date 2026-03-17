@@ -6,6 +6,10 @@ abstract final class AppRoutes {
   // Home
   static const home = '/home';
 
+  // Chat
+  static const chatInbox = '/chat';
+  static const chatSession = '/chat/session';
+
   // Settings
   static const settings = '/settings';
   static const language = '/language';

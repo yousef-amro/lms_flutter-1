@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lms_app/core/cache/local_storage_service.dart';
 import 'package:lms_app/core/domain/routing/app_routes.dart';
+import 'package:lms_app/features/chat/presentation/controllers/chat_controller.dart';
 
 import '../../../core/domain/utils/alerts.dart';
 import '../../../core/presentation/localization/localization_keys.dart';
@@ -22,7 +23,7 @@ class AuthController extends GetxController with Alerts {
   static const String loginScreenId = 'login_screen';
 
   final TextEditingController phoneController = TextEditingController(
-    text: kDebugMode ? "0799090791" : "",
+    text: kDebugMode ? "0791234567" : "",
   );
   final TextEditingController passwordController =
       TextEditingController(text: kDebugMode ? "Test@123" : "");
@@ -91,7 +92,10 @@ class AuthController extends GetxController with Alerts {
     _updateAuthScreens();
 
     try {
-      final response = await _repository.manualLogin(username, password);
+      final response = await _repository.manualLogin(
+        username,
+        password,
+      );
       await response.fold(
         (failure) async {
           authState = AuthState.failure;
@@ -117,7 +121,10 @@ class AuthController extends GetxController with Alerts {
     required String mobileNumber,
   }) async {
     if (screen == "login") {
-      Get.toNamed(AppRoutes.login, arguments: {'mobileNumber': mobileNumber});
+      Get.toNamed(
+        AppRoutes.login,
+        arguments: {'mobileNumber': mobileNumber},
+      );
     }
   }
 
@@ -138,6 +145,12 @@ class AuthController extends GetxController with Alerts {
     //   await Get.find<ProfileController>().fetchUser();
     // }
     _updateAuthScreens();
+
+    // Start chat socket after successful login so incoming student messages arrive
+    try {
+      await Get.find<ChatController>().connect();
+    } catch (_) {}
+
     Get.offAllNamed(AppRoutes.home);
   }
 
@@ -177,7 +190,9 @@ class AuthController extends GetxController with Alerts {
       authState = AuthState.loading;
       update();
 
-      await _sessionManager.handleUserLogout(showMessage: showMessage);
+      await _sessionManager.handleUserLogout(
+        showMessage: showMessage,
+      );
 
       authState = AuthState.initial;
       update();
@@ -216,7 +231,9 @@ class AuthController extends GetxController with Alerts {
       return success;
     } catch (e) {
       authState = AuthState.failure;
-      showFailSnackbar(text: LocalizationKeys.errorDuringTokenRefresh.tr);
+      showFailSnackbar(
+        text: LocalizationKeys.errorDuringTokenRefresh.tr,
+      );
       update();
       return false;
     }

@@ -16,6 +16,8 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
   final _textController = TextEditingController();
   final _scroll = ScrollController();
 
+  static const String _noCloseReasonSentinel = '__NO_CLOSE_REASON__';
+
   static const Color _onlineGreen = Color(0xFF00CD83);
   static const Color _bubbleOut = Color(0xFFDCF8C6);
   static const Color _userBubbleGreen = Color(0xFF0BAC4B);
@@ -124,8 +126,31 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
             if (sessionId.isNotEmpty)
               IconButton(
                 onPressed: () async {
-                  await controller.closeChat(sessionId: sessionId);
-                  Get.back();
+                  final closeReasonId = await showModalBottomSheet<String?>(
+                    context: context,
+                    backgroundColor: Colors.transparent,
+                    isScrollControlled: true,
+                    builder: (sheetContext) {
+                      return _CloseChatReasonSheet(
+                        controller: controller,
+                        colors: colors,
+                      );
+                    },
+                  );
+
+                  if (!mounted) return;
+                  if (closeReasonId == null) return;
+
+                  if (closeReasonId ==
+                      _ChatSessionScreenState._noCloseReasonSentinel) {
+                    await controller.closeChat(sessionId: sessionId);
+                  } else {
+                    await controller.closeChat(
+                      sessionId: sessionId,
+                      closeReasonId: closeReasonId,
+                    );
+                  }
+                  if (mounted) Get.back();
                 },
                 icon: Icon(Icons.close, color: colors.textDark, size: 22),
               ),
@@ -526,6 +551,288 @@ class _ChatInputBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CloseChatReasonSheet extends StatefulWidget {
+  const _CloseChatReasonSheet({
+    required this.controller,
+    required this.colors,
+  });
+
+  final ChatController controller;
+  final ColorManager colors;
+
+  @override
+  State<_CloseChatReasonSheet> createState() => _CloseChatReasonSheetState();
+}
+
+class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
+  bool _isLoading = true;
+  String? _errorMessage;
+  String? _selectedReasonId;
+  List<JsonMap> _reasons = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReasons();
+  }
+
+  Future<void> _loadReasons() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    List<JsonMap> reasons;
+    try {
+      reasons = await widget.controller.fetchCloseReasons(
+        isStudentReason: true,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        final msg = e.toString();
+        _errorMessage = msg.isNotEmpty ? msg : 'تعذر تحميل أسباب الإغلاق';
+      });
+      return;
+    }
+
+    final activeReasons = reasons
+        .where((r) {
+          final v = r['is_active'];
+          return v == true || (v is String && v.toLowerCase() == 'true');
+        })
+        .toList(growable: false);
+
+    setState(() {
+      _reasons = activeReasons;
+      _selectedReasonId = activeReasons.isNotEmpty
+          ? activeReasons.first['id']?.toString()
+          : null;
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sheetHeight = MediaQuery.sizeOf(context).height * 0.68;
+    final primary = widget.colors.primary;
+
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: SafeArea(
+        child: SizedBox(
+          height: sheetHeight,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              color: widget.colors.cardBackground,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: widget.colors.divider,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'لماذا تريد إغلاق المحادثة؟',
+                    style: AppTypography.bodyM.bold.copyWith(
+                      fontFamily: AppFonts.ffShamelFamily,
+                      color: widget.colors.textDark,
+                      fontSize: 16,
+                    ),
+                    textDirection: TextDirection.rtl,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _errorMessage != null
+                          ? Center(
+                              child: Text(
+                                _errorMessage!,
+                                style: AppTypography.bodyS.copyWith(
+                                  color: widget.colors.error,
+                                  fontFamily: AppFonts.ffShamelFamily,
+                                ),
+                                textDirection: TextDirection.rtl,
+                              ),
+                            )
+                          : _reasons.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    'لا توجد أسباب متاحة للإغلاق',
+                                    style: AppTypography.bodyS.copyWith(
+                                      color: widget.colors.textMuted,
+                                      fontFamily: AppFonts.ffShamelFamily,
+                                    ),
+                                    textDirection: TextDirection.rtl,
+                                  ),
+                                )
+                              : ListView.separated(
+                                  itemCount: _reasons.length,
+                                  separatorBuilder: (context, index) =>
+                                      const SizedBox(height: 10),
+                                  padding: EdgeInsets.zero,
+                                  itemBuilder: (context, index) {
+                                    final reason = _reasons[index];
+                                    final id =
+                                        reason['id']?.toString() ?? '';
+                                    final name =
+                                        reason['name']?.toString() ?? '';
+                                    final isSelected =
+                                        _selectedReasonId == id;
+
+                                    return Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius:
+                                            BorderRadius.circular(16),
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedReasonId = id;
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? primary.withValues(alpha: 0.08)
+                                                : widget.colors.cardBackground,
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? primary
+                                                  : widget.colors.divider,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            textDirection: TextDirection.rtl,
+                                            children: [
+                                              Icon(
+                                                isSelected
+                                                    ? Icons
+                                                        .radio_button_checked_rounded
+                                                    : Icons
+                                                        .radio_button_off_rounded,
+                                                color: isSelected ? primary : widget.colors.textMuted,
+                                                size: 20,
+                                              ),
+                                              const SizedBox(width: 10),
+                                              Expanded(
+                                                child: Text(
+                                                  name,
+                                                  style: AppTypography.bodyS
+                                                      .semiBold
+                                                      .copyWith(
+                                                    fontFamily:
+                                                        AppFonts.ffShamelFamily,
+                                                    color: widget.colors.textDark,
+                                                  ),
+                                                  textDirection:
+                                                      TextDirection.rtl,
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(context, null);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: widget.colors.textDark,
+                          side: BorderSide(
+                            color: widget.colors.divider,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                        ),
+                        child: Text(
+                          'الإلغاء',
+                          style: AppTypography.bodyM.semiBold.copyWith(
+                            fontFamily: AppFonts.ffShamelFamily,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                if (_selectedReasonId != null) {
+                                  Navigator.pop(context, _selectedReasonId);
+                                } else {
+                                  Navigator.pop(
+                                    context,
+                                    _ChatSessionScreenState
+                                        ._noCloseReasonSentinel,
+                                  );
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: widget.colors.error,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          disabledBackgroundColor:
+                              widget.colors.error.withValues(alpha: 0.45),
+                        ),
+                        child: Text(
+                          _selectedReasonId != null
+                              ? 'تأكيد إغلاق'
+                              : 'تأكيد إغلاق بدون سبب',
+                          style: AppTypography.bodyM.semiBold.copyWith(
+                            fontFamily: AppFonts.ffShamelFamily,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -199,6 +199,61 @@ class ChatController extends GetxController {
     _persistAssignedSessions();
   }
 
+  Future<List<JsonMap>> fetchCloseReasons({
+    required bool isStudentReason,
+  }) async {
+    List<JsonMap> parseReasons(dynamic raw) {
+      if (raw is List) {
+        return raw
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+
+      // Common fallback shapes.
+      if (raw is Map && raw['data'] is List) {
+        return (raw['data'] as List)
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+
+      return const [];
+    }
+
+    Future<NetworkResponse> request({required bool authRequired}) {
+      return _network.request(
+        NetworkRequest(
+          route: NetworkRouter.closeReasonsStudent,
+          requestType: RequestType.get,
+          isAuthorizationRequired: authRequired,
+          parameters: {
+            // Backend expects this query parameter to decide the reason set.
+            // Send as a boolean so Dio serializes to `true/false`.
+            'is_student_reason': isStudentReason,
+          },
+        ),
+      );
+    }
+
+    final first = await request(authRequired: true);
+    if (first.status == NetworkResponseStatus.success) {
+      return parseReasons(first.data);
+    }
+
+    // If auth isn't required for this endpoint, a missing/expired token
+    // would make the list look empty. Retry without authorization.
+    final second = await request(authRequired: false);
+    if (second.status == NetworkResponseStatus.success) {
+      return parseReasons(second.data);
+    }
+
+    final message =
+        second.failure?.message ?? first.failure?.message ?? 'Failed request';
+    log('ChatController: fetchCloseReasons failed: $message');
+    throw Exception(message);
+  }
+
   Future<void> setAttachmentPermission({
     required String sessionId,
     required bool allow,

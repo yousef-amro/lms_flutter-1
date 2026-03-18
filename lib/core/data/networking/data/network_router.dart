@@ -6,6 +6,7 @@ enum NetworkRouter {
 
   // Chat
   callCenterSessions(path: '/api/v1/chat/call-center/sessions'),
+  closeReasonsStudent(path: '/api/v1/chat/close-reasons'),
 
   // Dashboard
   sensors(path: '/api/my-sensors/'),

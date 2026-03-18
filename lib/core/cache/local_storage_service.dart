@@ -152,4 +152,33 @@ class LocalStorageService extends BaseStorage {
   }
 
   bool get isDarkMode => themeMode == ThemeMode.dark;
+
+  /// Persisted list of chat sessions this call-center agent has accepted.
+  /// Each item: { "session_id", "peer_name", "node_title" }.
+  List<Map<String, String>> getAssignedChatSessions() {
+    final raw =
+        sharedPreferences?.getString(LocalStorageKeys.assignedChatSessions.key);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>?;
+      if (list == null) return [];
+      return list.map((e) {
+        if (e is! Map) return null;
+        final m = <String, String>{};
+        for (final entry in e.entries) {
+          m[entry.key.toString()] = entry.value?.toString() ?? '';
+        }
+        return m['session_id']?.isNotEmpty == true ? m : null;
+      }).whereType<Map<String, String>>().toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> setAssignedChatSessions(List<Map<String, String>> sessions) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.assignedChatSessions.key,
+      jsonEncode(sessions),
+    );
+  }
 }

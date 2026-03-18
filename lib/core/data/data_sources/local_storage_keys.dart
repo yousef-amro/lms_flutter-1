@@ -8,7 +8,8 @@ enum LocalStorageKeys {
   versionName('APP_VERSION_NAME'),
   versionNumber('APP_VERSION_NUMBER'),
   deviceTimezone('DEVICE_TIMEZONE'),
-  user('USER_DATA');
+  user('USER_DATA'),
+  assignedChatSessions('ASSIGNED_CHAT_SESSIONS');
 
   final String key;
 

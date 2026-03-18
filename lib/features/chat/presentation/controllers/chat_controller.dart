@@ -2,6 +2,7 @@ import 'dart:developer';
 
 import 'package:get/get.dart';
 
+import '../../../../core/cache/local_storage_service.dart';
 import '../../../../core/services/chat_websocket_service.dart';
 
 typedef JsonMap = Map<String, dynamic>;
@@ -20,14 +21,26 @@ class ChatController extends GetxController {
 
   final messages = <JsonMap>[].obs;
   final incomingRequests = <JsonMap>[].obs;
+  /// Sessions this agent has accepted (persisted so they survive app restart).
+  final assignedSessions = <Map<String, String>>[].obs;
   final recentEventTypes = <String>[].obs;
 
   @override
   void onInit() {
     super.onInit();
+    _loadAssignedSessions();
     _ws.isConnectedStream.listen((v) => isConnected.value = v);
     _ws.events.listen(_handleEvent);
     connect();
+  }
+
+  void _loadAssignedSessions() {
+    final stored = LocalStorageService().getAssignedChatSessions();
+    assignedSessions.assignAll(stored);
+  }
+
+  Future<void> _persistAssignedSessions() async {
+    await LocalStorageService().setAssignedChatSessions(assignedSessions.toList());
   }
 
   Future<void> connect() async {
@@ -56,6 +69,12 @@ class ChatController extends GetxController {
       payload['close_reason_id'] = closeReasonId;
     }
     await _ws.sendAction('close_chat', payload);
+    // Remove from lists immediately so UI updates when user navigates back
+    incomingRequests.removeWhere(
+      (r) => r['session_id']?.toString() == sessionId,
+    );
+    assignedSessions.removeWhere((s) => s['session_id'] == sessionId);
+    _persistAssignedSessions();
   }
 
   Future<void> setAttachmentPermission({
@@ -112,10 +131,43 @@ class ChatController extends GetxController {
           // ignore for now (other agents)
           break;
         }
-        currentSessionId.value = event['session_id']?.toString();
+        final sessionId = event['session_id']?.toString();
+        currentSessionId.value = sessionId;
         final session = event['session'];
         if (session is Map) {
           allowAttachments.value = session['allow_attachments'] == true;
+        }
+        // Persist this accepted session so it survives app restart
+        if (sessionId != null && sessionId.isNotEmpty) {
+          JsonMap? request;
+          for (final r in incomingRequests) {
+            if (r['session_id']?.toString() == sessionId) {
+              request = r;
+              break;
+            }
+          }
+          String peerName = '';
+          String nodeTitle = '';
+          if (request != null) {
+            final student = request['student'];
+            peerName = student is Map
+                ? (student['full_name']?.toString() ?? '')
+                : '';
+            nodeTitle = request['node_title']?.toString() ?? '';
+            incomingRequests.removeWhere(
+              (r) => r['session_id']?.toString() == sessionId,
+            );
+          }
+          final entry = <String, String>{
+            'session_id': sessionId,
+            'peer_name': peerName,
+            'node_title': nodeTitle,
+          };
+          assignedSessions.removeWhere(
+            (s) => s['session_id'] == sessionId,
+          );
+          assignedSessions.insert(0, entry);
+          _persistAssignedSessions();
         }
         break;
 
@@ -132,8 +184,18 @@ class ChatController extends GetxController {
         break;
 
       case 'chat_closed':
-        if (event['session_id']?.toString() == currentSessionId.value) {
+        final closedSessionId = event['session_id']?.toString();
+        if (closedSessionId == currentSessionId.value) {
           currentSessionId.value = null;
+        }
+        if (closedSessionId != null && closedSessionId.isNotEmpty) {
+          incomingRequests.removeWhere(
+            (r) => r['session_id']?.toString() == closedSessionId,
+          );
+          assignedSessions.removeWhere(
+            (s) => s['session_id'] == closedSessionId,
+          );
+          _persistAssignedSessions();
         }
         break;
 
@@ -144,9 +206,16 @@ class ChatController extends GetxController {
     }
   }
 
-  void openSession(String sessionId) {
+  void openSession(String sessionId, {String? peerName}) {
     currentSessionId.value = sessionId;
-    Get.toNamed('/chat/session', arguments: {'session_id': sessionId});
+    messages.clear();
+    Get.toNamed(
+      '/chat/session',
+      arguments: {
+        'session_id': sessionId,
+        if (peerName != null && peerName.isNotEmpty) 'peer_name': peerName,
+      },
+    );
   }
 
   // Keep socket alive globally; don't disconnect here.

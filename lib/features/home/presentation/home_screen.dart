@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:lms_app/core/presentation/theme/color_manager.dart';
 import 'package:lms_app/core/presentation/theme/text_manager.dart';
 import 'package:lms_app/core/domain/routing/app_routes.dart';
+import 'package:lms_app/features/chat/presentation/controllers/chat_controller.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -25,32 +26,127 @@ class HomeScreen extends StatelessWidget {
                 _HomeTopBar(
                   title: 'سجل المحادثات',
                   onSearch: () {},
-                  onOpenLiveChat: () => Get.toNamed(AppRoutes.chatInbox),
+                  onOpenLiveChat: () =>
+                      Get.toNamed(AppRoutes.chatInbox),
                 ),
                 const SizedBox(height: 16),
                 const _StatsSection(),
                 const SizedBox(height: 14),
                 const _FiltersRow(),
                 const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    itemBuilder: (context, index) {
-                      final items = _demoChats();
-                      final item = items[index];
-                      return _ChatTile(item: item);
-                    },
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 8),
-                    itemCount: _demoChats().length,
-                  ),
-                ),
+                Expanded(child: _ChatsList()),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+class _ChatsList extends StatelessWidget {
+  Widget _buildEmptyState() {
+    return Center(
+      child: Text(
+        'لا يوجد محادثات',
+        style: AppTypography.bodyM.copyWith(
+          color: ColorManager().textDark.withValues(alpha: 0.55),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Get.isRegistered<ChatController>()) {
+      return _buildEmptyState();
+    }
+    final controller = Get.find<ChatController>();
+    return Obx(() {
+      final assigned = controller.assignedSessions;
+      final requests = controller.incomingRequests;
+      final totalCount = assigned.length + requests.length;
+      if (totalCount == 0) {
+        return _buildEmptyState();
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.only(bottom: 24),
+        itemCount: totalCount,
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          if (index < assigned.length) {
+            final session = assigned[index];
+            final item = _assignedToChatItem(session);
+            return _ChatTile(
+              item: item,
+              onTap: () => _onAssignedTap(controller, session),
+            );
+          }
+          final request = requests[index - assigned.length];
+          final item = _requestToChatItem(request);
+          return _ChatTile(
+            item: item,
+            onTap: () => _onChatTap(controller, request),
+          );
+        },
+      );
+    });
+  }
+
+  _ChatItem _assignedToChatItem(Map<String, String> session) {
+    final name = session['peer_name']?.isNotEmpty == true
+        ? session['peer_name']!
+        : 'محادثة';
+    final message = session['node_title']?.isNotEmpty == true
+        ? session['node_title']!
+        : 'محادثة نشطة';
+    return _ChatItem(
+      name: name,
+      message: message,
+      timeText: '',
+      dateText: '',
+      isOnline: true,
+      unreadCount: 0,
+    );
+  }
+
+  _ChatItem _requestToChatItem(Map<String, dynamic> request) {
+    final student = request['student'];
+    final studentName = student is Map
+        ? (student['full_name']?.toString() ?? 'طالب')
+        : 'طالب';
+    final nodeTitle =
+        request['node_title']?.toString() ?? 'طلب محادثة جديدة';
+    return _ChatItem(
+      name: studentName,
+      message: nodeTitle,
+      timeText: '',
+      dateText: '',
+      isOnline: true,
+      unreadCount: 1,
+    );
+  }
+
+  void _onAssignedTap(ChatController controller, Map<String, String> session) {
+    final sessionId = session['session_id'] ?? '';
+    if (sessionId.isEmpty) return;
+    final peerName = session['peer_name'];
+    controller.openSession(sessionId, peerName: peerName);
+  }
+
+  Future<void> _onChatTap(
+    ChatController controller,
+    Map<String, dynamic> request,
+  ) async {
+    final sessionId = request['session_id']?.toString() ?? '';
+    if (sessionId.isEmpty) return;
+    final student = request['student'];
+    final peerName = student is Map
+        ? (student['full_name']?.toString() ?? '')
+        : null;
+    await controller.acceptChat(sessionId: sessionId);
+    controller.openSession(sessionId, peerName: peerName);
   }
 }
 
@@ -317,54 +413,17 @@ class _ChatItem {
   });
 }
 
-List<_ChatItem> _demoChats() {
-  return const [
-    _ChatItem(
-      name: 'د. عبد الرحيم صافي',
-      message: 'السلام عليكم يحب عليك ...',
-      timeText: '10:00 PM',
-      dateText: '22 أبريل 2026',
-      unreadCount: 3,
-      isOnline: true,
-    ),
-    _ChatItem(
-      name: 'د. عبد الرحيم صافي',
-      message: 'السلام عليكم يحب عليك ...',
-      timeText: '',
-      dateText: '22 أبريل 2026',
-      isOnline: true,
-      hasDoubleCheck: true,
-    ),
-    _ChatItem(
-      name: 'د. عبد الرحيم صافي',
-      message: 'السلام عليكم يحب عليك ...',
-      timeText: '',
-      dateText: '22 أبريل 2026',
-      isOnline: false,
-      statusChip: 'مغلقه',
-      statusColor: Color(0xFFEF4444),
-      hasDoubleCheck: true,
-    ),
-    _ChatItem(
-      name: 'د. عبد الرحيم صافي',
-      message: 'السلام عليكم يحب عليك ...',
-      timeText: '10:00 PM',
-      dateText: '22 أبريل 2026',
-      unreadCount: 3,
-      isOnline: false,
-    ),
-  ];
-}
-
 class _ChatTile extends StatelessWidget {
   final _ChatItem item;
-  const _ChatTile({required this.item});
+  final VoidCallback? onTap;
+
+  const _ChatTile({required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final colors = ColorManager();
 
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 12,
@@ -391,10 +450,6 @@ class _ChatTile extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    if (item.unreadCount != null) ...[
-                      _UnreadBadge(count: item.unreadCount!),
-                      const SizedBox(width: 8),
-                    ],
                     if (item.statusChip != null &&
                         item.statusColor != null) ...[
                       _StatusChip(
@@ -470,6 +525,17 @@ class _ChatTile extends StatelessWidget {
         ],
       ),
     );
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: content,
+        ),
+      );
+    }
+    return content;
   }
 }
 
@@ -509,28 +575,6 @@ class _Avatar extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _UnreadBadge extends StatelessWidget {
-  final int count;
-  const _UnreadBadge({required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEF4444),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$count',
-        style: AppTypography.captionM.bold.copyWith(
-          color: Colors.white,
-        ),
-      ),
     );
   }
 }

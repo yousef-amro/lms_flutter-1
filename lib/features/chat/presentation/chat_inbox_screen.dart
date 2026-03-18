@@ -14,16 +14,36 @@ class ChatInboxScreen extends StatelessWidget {
     AppTypography.init();
     final controller = Get.find<ChatController>();
 
-    return Scaffold(
-      backgroundColor: colors.scaffoldBackground,
-      appBar: AppBar(
+    final isArabic = Get.locale?.languageCode.toLowerCase() == 'ar';
+
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Scaffold(
         backgroundColor: colors.scaffoldBackground,
-        elevation: 0,
-        title: Text(
-          'المحادثات المباشرة',
-          style: AppTypography.subheadingM.copyWith(color: colors.textDark),
+        appBar: AppBar(
+          backgroundColor: colors.cardBackground,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(
+              isArabic
+                  ? Icons.arrow_back_ios_rounded
+                  : Icons.arrow_forward_ios_rounded,
+              size: 20,
+              color: colors.textDark,
+            ),
+            onPressed: () => Get.back(),
+          ),
+          title: Text(
+            'المحادثات المباشرة',
+            style: TextStyle(
+              fontFamily: AppFonts.ffShamelFamily,
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: colors.textDark,
+            ),
+            textDirection: TextDirection.rtl,
+          ),
         ),
-      ),
       body: Obx(() {
         final connected = controller.isConnected.value;
         return Padding(
@@ -40,7 +60,8 @@ class ChatInboxScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: controller.incomingRequests.isEmpty
+                child: controller.assignedSessions.isEmpty &&
+                        controller.incomingRequests.isEmpty
                     ? Center(
                         child: Text(
                           'لا توجد طلبات محادثة حالياً',
@@ -49,92 +70,205 @@ class ChatInboxScreen extends StatelessWidget {
                           ),
                         ),
                       )
-                    : ListView.separated(
-                        itemCount: controller.incomingRequests.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final item = controller.incomingRequests[index];
-                          final sessionId = item['session_id']?.toString() ?? '';
-                          final student = item['student'];
-                          final studentName = student is Map
-                              ? (student['full_name']?.toString() ?? 'طالب')
-                              : 'طالب';
-                          final nodeTitle =
-                              item['node_title']?.toString() ?? '';
-
-                          return Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: colors.cardBackground,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.03),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 8),
+                    : ListView(
+                        children: [
+                          // Already accepted (persisted) chats — restored after restart
+                          if (controller.assignedSessions.isNotEmpty) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                'محادثاتك النشطة',
+                                style: AppTypography.captionM.bold.copyWith(
+                                  color: colors.textDark.withValues(alpha: 0.8),
                                 ),
-                              ],
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                            child: Row(
-                              textDirection: TextDirection.rtl,
-                              children: [
-                                const CircleAvatar(
-                                  backgroundColor: Color(0xFFE5E7EB),
-                                  child: Icon(
-                                    Icons.person,
-                                    color: Color(0xFF6B7280),
+                            ...controller.assignedSessions.map((item) {
+                              final sessionId =
+                                  item['session_id'] ?? '';
+                              final peerName =
+                                  item['peer_name']?.isNotEmpty == true
+                                      ? item['peer_name']!
+                                      : 'محادثة';
+                              final nodeTitle = item['node_title'] ?? '';
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: colors.cardBackground,
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.03),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                  child: Row(
+                                    textDirection: TextDirection.rtl,
                                     children: [
-                                      Text(
-                                        studentName,
-                                        textAlign: TextAlign.right,
-                                        style: AppTypography.bodyM.bold.copyWith(
-                                          color: colors.textDark,
+                                      const CircleAvatar(
+                                        backgroundColor: Color(0xFFE5E7EB),
+                                        child: Icon(
+                                          Icons.person,
+                                          color: Color(0xFF6B7280),
                                         ),
                                       ),
-                                      if (nodeTitle.isNotEmpty) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          nodeTitle,
-                                          textAlign: TextAlign.right,
-                                          style: AppTypography.captionM.copyWith(
-                                            color: colors.textDark.withValues(
-                                              alpha: 0.6,
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              peerName,
+                                              textAlign: TextAlign.right,
+                                              style: AppTypography.bodyM.bold
+                                                  .copyWith(
+                                                color: colors.textDark,
+                                              ),
                                             ),
-                                          ),
+                                            if (nodeTitle.isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                nodeTitle,
+                                                textAlign: TextAlign.right,
+                                                style: AppTypography.captionM
+                                                    .copyWith(
+                                                  color: colors.textDark
+                                                      .withValues(alpha: 0.6),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
                                         ),
-                                      ],
+                                      ),
+                                      const SizedBox(width: 10),
+                                      FilledButton(
+                                        onPressed: sessionId.isEmpty
+                                            ? null
+                                            : () => controller.openSession(
+                                                  sessionId,
+                                                  peerName: peerName,
+                                                ),
+                                        child: const Text('فتح'),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                FilledButton(
-                                  onPressed: sessionId.isEmpty
-                                      ? null
-                                      : () async {
-                                          await controller.acceptChat(
-                                            sessionId: sessionId,
-                                          );
-                                          controller.openSession(sessionId);
-                                        },
-                                  child: const Text('قبول'),
+                              );
+                            }),
+                            const SizedBox(height: 16),
+                          ],
+                          // Pending requests (new_chat_request)
+                          if (controller.incomingRequests.isNotEmpty) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                'طلبات جديدة',
+                                style: AppTypography.captionM.bold.copyWith(
+                                  color: colors.textDark.withValues(alpha: 0.8),
                                 ),
-                              ],
+                                textAlign: TextAlign.right,
+                              ),
                             ),
-                          );
-                        },
+                            ...controller.incomingRequests.map((item) {
+                              final sessionId =
+                                  item['session_id']?.toString() ?? '';
+                              final student = item['student'];
+                              final studentName = student is Map
+                                  ? (student['full_name']?.toString() ?? 'طالب')
+                                  : 'طالب';
+                              final nodeTitle =
+                                  item['node_title']?.toString() ?? '';
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: colors.cardBackground,
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.03),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    textDirection: TextDirection.rtl,
+                                    children: [
+                                      const CircleAvatar(
+                                        backgroundColor: Color(0xFFE5E7EB),
+                                        child: Icon(
+                                          Icons.person,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              studentName,
+                                              textAlign: TextAlign.right,
+                                              style: AppTypography.bodyM.bold
+                                                  .copyWith(
+                                                color: colors.textDark,
+                                              ),
+                                            ),
+                                            if (nodeTitle.isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                nodeTitle,
+                                                textAlign: TextAlign.right,
+                                                style: AppTypography.captionM
+                                                    .copyWith(
+                                                  color: colors.textDark
+                                                      .withValues(alpha: 0.6),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      FilledButton(
+                                        onPressed: sessionId.isEmpty
+                                            ? null
+                                            : () async {
+                                                await controller.acceptChat(
+                                                  sessionId: sessionId,
+                                                );
+                                                controller.openSession(
+                                                  sessionId,
+                                                  peerName: studentName,
+                                                );
+                                              },
+                                        child: const Text('قبول'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        ],
                       ),
               ),
             ],
           ),
         );
       }),
+    ),
     );
   }
 }

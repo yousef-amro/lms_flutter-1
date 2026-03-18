@@ -103,28 +103,31 @@ class AppWidget extends StatelessWidget {
             base,
             Positioned(
               top: 0,
+              left: 0,
               right: 0,
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 6, right: 6),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(999),
-                      onTap: () => Get.find<SessionManagerService>()
-                          .handleUserLogout(showMessage: true),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: ColorManager()
-                              .primary
-                              .withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        child: Icon(
-                          Icons.logout,
-                          color: ColorManager().primary,
-                          size: 20,
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Center(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: () => Get.find<SessionManagerService>()
+                            .handleUserLogout(showMessage: true),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: ColorManager()
+                                .primary
+                                .withValues(alpha: 0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          padding: const EdgeInsets.all(10),
+                          child: Icon(
+                            Icons.logout,
+                            color: ColorManager().primary,
+                            size: 20,
+                          ),
                         ),
                       ),
                     ),

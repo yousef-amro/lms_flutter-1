@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:lms_app/core/presentation/theme/color_manager.dart';
 import 'package:lms_app/core/presentation/theme/text_manager.dart';
-import 'package:lms_app/core/domain/routing/app_routes.dart';
 import 'package:lms_app/features/chat/presentation/controllers/chat_controller.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -26,15 +25,21 @@ class HomeScreen extends StatelessWidget {
                 _HomeTopBar(
                   title: 'سجل المحادثات',
                   onSearch: () {},
-                  onOpenLiveChat: () =>
-                      Get.toNamed(AppRoutes.chatInbox),
                 ),
                 const SizedBox(height: 16),
                 const _StatsSection(),
                 const SizedBox(height: 14),
                 const _FiltersRow(),
                 const SizedBox(height: 10),
-                Expanded(child: _ChatsList()),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      if (!Get.isRegistered<ChatController>()) return;
+                      await Get.find<ChatController>().refreshHome();
+                    },
+                    child: _ChatsList(),
+                  ),
+                ),
               ],
             ),
           ),
@@ -46,13 +51,22 @@ class HomeScreen extends StatelessWidget {
 
 class _ChatsList extends StatelessWidget {
   Widget _buildEmptyState() {
-    return Center(
-      child: Text(
-        'لا يوجد محادثات',
-        style: AppTypography.bodyM.copyWith(
-          color: ColorManager().textDark.withValues(alpha: 0.55),
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        SizedBox(
+          height: 240,
+          child: Center(
+            child: Text(
+              'لا يوجد محادثات',
+              style: AppTypography.bodyM.copyWith(
+                color: ColorManager().textDark.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -70,6 +84,7 @@ class _ChatsList extends StatelessWidget {
         return _buildEmptyState();
       }
       return ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 24),
         itemCount: totalCount,
         separatorBuilder: (context, index) =>
@@ -108,6 +123,9 @@ class _ChatsList extends StatelessWidget {
       dateText: '',
       isOnline: true,
       unreadCount: 0,
+      statusChip: null,
+      statusColor: null,
+      hasDoubleCheck: false,
     );
   }
 
@@ -125,6 +143,9 @@ class _ChatsList extends StatelessWidget {
       dateText: '',
       isOnline: true,
       unreadCount: 1,
+      statusChip: null,
+      statusColor: null,
+      hasDoubleCheck: false,
     );
   }
 
@@ -156,12 +177,10 @@ class _ChatsList extends StatelessWidget {
 class _HomeTopBar extends StatelessWidget {
   final String title;
   final VoidCallback onSearch;
-  final VoidCallback onOpenLiveChat;
 
   const _HomeTopBar({
     required this.title,
     required this.onSearch,
-    required this.onOpenLiveChat,
   });
 
   @override
@@ -170,27 +189,6 @@ class _HomeTopBar extends StatelessWidget {
 
     return Row(
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: onOpenLiveChat,
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: colors.primary.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.chat_bubble_outline,
-                color: colors.primary,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
         Material(
           color: Colors.transparent,
           child: InkWell(

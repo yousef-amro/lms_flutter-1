@@ -1,16 +1,26 @@
+import 'dart:collection';
 import 'dart:developer';
 
 import 'package:get/get.dart';
 
 import '../../../../core/cache/local_storage_service.dart';
+import '../../../../core/data/networking/data/network_request.dart';
+import '../../../../core/data/networking/data/network_response.dart';
+import '../../../../core/data/networking/data/network_router.dart';
+import '../../../../core/data/networking/network_adapter.dart';
 import '../../../../core/services/chat_websocket_service.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
 class ChatController extends GetxController {
   final ChatWebSocketService _ws;
+  final NetworkAdapterAbstraction _network;
 
-  ChatController({required ChatWebSocketService ws}) : _ws = ws;
+  ChatController({
+    required ChatWebSocketService ws,
+    required NetworkAdapterAbstraction network,
+  }) : _ws = ws,
+       _network = network;
 
   final isConnected = false.obs;
   final role = RxnString();
@@ -23,15 +33,69 @@ class ChatController extends GetxController {
   final incomingRequests = <JsonMap>[].obs;
   /// Sessions this agent has accepted (persisted so they survive app restart).
   final assignedSessions = <Map<String, String>>[].obs;
+  /// All call-center sessions fetched from REST API.
+  final callCenterSessions = <JsonMap>[].obs;
+  final isLoadingCallCenterSessions = false.obs;
   final recentEventTypes = <String>[].obs;
+
+  /// Avoid duplicates when backend emits both `message_sent` and `new_message`.
+  final LinkedHashSet<String> _seenMessageKeys = LinkedHashSet<String>();
 
   @override
   void onInit() {
     super.onInit();
     _loadAssignedSessions();
+    loadCallCenterSessions();
     _ws.isConnectedStream.listen((v) => isConnected.value = v);
     _ws.events.listen(_handleEvent);
     connect();
+  }
+
+  Future<void> refreshHome() async {
+    _loadAssignedSessions();
+    await loadCallCenterSessions();
+    if (!isConnected.value) {
+      await connect();
+    }
+  }
+
+  void _addMessageDedup(JsonMap msg) {
+    final key = _messageKey(msg);
+    if (key.isNotEmpty) {
+      if (_seenMessageKeys.contains(key)) return;
+      _seenMessageKeys.add(key);
+      if (_seenMessageKeys.length > 400) {
+        final toRemove = _seenMessageKeys.length - 250;
+        for (var i = 0; i < toRemove; i++) {
+          _seenMessageKeys.remove(_seenMessageKeys.first);
+        }
+      }
+    }
+    messages.add(msg);
+  }
+
+  String _messageKey(JsonMap msg) {
+    final directId = msg['id']?.toString() ?? msg['message_id']?.toString();
+    if (directId != null && directId.trim().isNotEmpty) {
+      return 'id:${directId.trim()}';
+    }
+
+    final sender = msg['sender'];
+    final senderId = (sender is Map) ? sender['id']?.toString() : null;
+    final sessionId = msg['session_id']?.toString() ?? currentSessionId.value;
+    final text = (msg['text']?.toString() ?? '').trim();
+    final fileUrl = (msg['file_url']?.toString() ?? '').trim();
+    final sentAt = msg['sent_at']?.toString() ?? '';
+
+    final composite = [
+      if (sessionId != null) sessionId.trim(),
+      if (senderId != null) senderId.trim(),
+      text,
+      fileUrl,
+      sentAt.trim(),
+    ].where((e) => e.isNotEmpty).join('|');
+
+    return composite.isEmpty ? '' : 'c:$composite';
   }
 
   void _loadAssignedSessions() {
@@ -48,6 +112,45 @@ class ChatController extends GetxController {
       await _ws.connect();
     } catch (e) {
       log('ChatController: connect failed: $e');
+    }
+  }
+
+  Future<void> loadCallCenterSessions() async {
+    if (isLoadingCallCenterSessions.value) return;
+    isLoadingCallCenterSessions.value = true;
+    try {
+      final res = await _network.request(
+        NetworkRequest(
+          route: NetworkRouter.callCenterSessions,
+          requestType: RequestType.get,
+          isAuthorizationRequired: true,
+        ),
+      );
+
+      if (res.status == NetworkResponseStatus.success) {
+        final data = res.data;
+        if (data is List) {
+          callCenterSessions.assignAll(
+            data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+          );
+        } else if (data is Map && data['results'] is List) {
+          // common pagination shape
+          final list = (data['results'] as List);
+          callCenterSessions.assignAll(
+            list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+          );
+        } else {
+          callCenterSessions.clear();
+        }
+      } else {
+        log(
+          'ChatController: loadCallCenterSessions failed: ${res.failure?.message}',
+        );
+      }
+    } catch (e) {
+      log('ChatController: loadCallCenterSessions exception: $e');
+    } finally {
+      isLoadingCallCenterSessions.value = false;
     }
   }
 
@@ -175,7 +278,7 @@ class ChatController extends GetxController {
       case 'new_message':
         final msg = event['message'];
         if (msg is Map<String, dynamic>) {
-          messages.add(msg);
+          _addMessageDedup(msg);
         }
         break;
 
@@ -209,6 +312,7 @@ class ChatController extends GetxController {
   void openSession(String sessionId, {String? peerName}) {
     currentSessionId.value = sessionId;
     messages.clear();
+    _seenMessageKeys.clear();
     Get.toNamed(
       '/chat/session',
       arguments: {

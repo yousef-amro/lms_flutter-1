@@ -61,7 +61,10 @@ class NetworkCoreBinding extends Bindings {
       permanent: true,
     );
     Get.put<ChatController>(
-      ChatController(ws: Get.find<ChatWebSocketService>()),
+      ChatController(
+        ws: Get.find<ChatWebSocketService>(),
+        network: Get.find<NetworkAdapterAbstraction>(),
+      ),
       permanent: true,
     );
   }

@@ -4,6 +4,9 @@ enum NetworkRouter {
   checkUpdate(path: '/api/v1/auth/check-update'),
   registerDevice(path: '/api/v1/general/fcm/register-token'),
 
+  // Chat
+  callCenterSessions(path: '/api/v1/chat/call-center/sessions'),
+
   // Dashboard
   sensors(path: '/api/my-sensors/'),
 

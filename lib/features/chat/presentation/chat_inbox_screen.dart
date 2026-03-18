@@ -43,9 +43,17 @@ class ChatInboxScreen extends StatelessWidget {
             ),
             textDirection: TextDirection.rtl,
           ),
+          actions: [
+            IconButton(
+              tooltip: 'تحديث',
+              onPressed: () => controller.loadCallCenterSessions(),
+              icon: Icon(Icons.refresh, color: colors.textDark),
+            ),
+          ],
         ),
       body: Obx(() {
         final connected = controller.isConnected.value;
+        final isLoading = controller.isLoadingCallCenterSessions.value;
         return Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -59,9 +67,17 @@ class ChatInboxScreen extends StatelessWidget {
                 recentTypes: controller.recentEventTypes,
               ),
               const SizedBox(height: 12),
+              if (isLoading)
+                LinearProgressIndicator(
+                  minHeight: 3,
+                  color: colors.primary,
+                  backgroundColor: colors.divider.withValues(alpha: 0.35),
+                ),
+              const SizedBox(height: 12),
               Expanded(
                 child: controller.assignedSessions.isEmpty &&
-                        controller.incomingRequests.isEmpty
+                        controller.incomingRequests.isEmpty &&
+                        controller.callCenterSessions.isEmpty
                     ? Center(
                         child: Text(
                           'لا توجد طلبات محادثة حالياً',
@@ -72,6 +88,98 @@ class ChatInboxScreen extends StatelessWidget {
                       )
                     : ListView(
                         children: [
+                          if (controller.callCenterSessions.isNotEmpty) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                'كل محادثات مركز الاتصال',
+                                style: AppTypography.captionM.bold.copyWith(
+                                  color: colors.textDark.withValues(alpha: 0.8),
+                                ),
+                                textAlign: TextAlign.right,
+                              ),
+                            ),
+                            ...controller.callCenterSessions.map((item) {
+                              final sessionId =
+                                  item['session_id']?.toString() ?? '';
+                              final peerName =
+                                  item['peer_name']?.toString().trim();
+                              final nodeTitle =
+                                  item['node_title']?.toString() ?? '';
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: colors.cardBackground,
+                                    borderRadius: BorderRadius.circular(14),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.03),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    textDirection: TextDirection.rtl,
+                                    children: [
+                                      const CircleAvatar(
+                                        backgroundColor: Color(0xFFE5E7EB),
+                                        child: Icon(
+                                          Icons.support_agent_rounded,
+                                          color: Color(0xFF6B7280),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              (peerName?.isNotEmpty == true)
+                                                  ? peerName!
+                                                  : 'محادثة',
+                                              textAlign: TextAlign.right,
+                                              style: AppTypography.bodyM.bold
+                                                  .copyWith(
+                                                color: colors.textDark,
+                                              ),
+                                            ),
+                                            if (nodeTitle.isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                nodeTitle,
+                                                textAlign: TextAlign.right,
+                                                style: AppTypography.captionM
+                                                    .copyWith(
+                                                  color: colors.textDark
+                                                      .withValues(alpha: 0.6),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      FilledButton(
+                                        onPressed: sessionId.isEmpty
+                                            ? null
+                                            : () => controller.openSession(
+                                                  sessionId,
+                                                  peerName: peerName,
+                                                ),
+                                        child: const Text('فتح'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }),
+                            const SizedBox(height: 16),
+                          ],
                           // Already accepted (persisted) chats — restored after restart
                           if (controller.assignedSessions.isNotEmpty) ...[
                             Padding(

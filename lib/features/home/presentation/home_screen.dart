@@ -90,19 +90,20 @@ class _ChatsList extends StatelessWidget {
         separatorBuilder: (context, index) =>
             const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          if (index < assigned.length) {
-            final session = assigned[index];
-            final item = _assignedToChatItem(session);
+          // Always show pending/incoming requests at the top.
+          if (index < requests.length) {
+            final request = requests[index];
+            final item = _requestToChatItem(request);
             return _ChatTile(
               item: item,
-              onTap: () => _onAssignedTap(controller, session),
+              onTap: () => _onChatTap(controller, request),
             );
           }
-          final request = requests[index - assigned.length];
-          final item = _requestToChatItem(request);
+          final session = assigned[index - requests.length];
+          final item = _assignedToChatItem(session);
           return _ChatTile(
             item: item,
-            onTap: () => _onChatTap(controller, request),
+            onTap: () => _onAssignedTap(controller, session),
           );
         },
       );
@@ -143,8 +144,8 @@ class _ChatsList extends StatelessWidget {
       dateText: '',
       isOnline: true,
       unreadCount: 1,
-      statusChip: null,
-      statusColor: null,
+      statusChip: 'قبول',
+      statusColor: ColorManager().primary,
       hasDoubleCheck: false,
     );
   }

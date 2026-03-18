@@ -148,6 +148,15 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                 ];
 
                 if (msgs.isEmpty) {
+                  // While we fetch history, show a spinner instead of the empty-state text.
+                  if (controller.isLoadingMessages.value) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
                   listChildren.add(
                     Center(
                       child: Padding(

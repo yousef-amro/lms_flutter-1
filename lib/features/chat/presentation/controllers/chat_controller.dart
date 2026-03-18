@@ -30,6 +30,7 @@ class ChatController extends GetxController {
   final allowAttachments = false.obs;
 
   final messages = <JsonMap>[].obs;
+  final isLoadingMessages = false.obs;
   final incomingRequests = <JsonMap>[].obs;
   /// Sessions this agent has accepted (persisted so they survive app restart).
   final assignedSessions = <Map<String, String>>[].obs;
@@ -128,20 +129,38 @@ class ChatController extends GetxController {
       );
 
       if (res.status == NetworkResponseStatus.success) {
-        final data = res.data;
-        if (data is List) {
-          callCenterSessions.assignAll(
-            data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
-          );
-        } else if (data is Map && data['results'] is List) {
+        final raw = res.data;
+        List list = const [];
+        if (raw is List) {
+          list = raw;
+        } else if (raw is Map && raw['data'] is List) {
+          // backend shape: { next, previous, count, data: [...] }
+          list = raw['data'] as List;
+        } else if (raw is Map && raw['results'] is List) {
           // common pagination shape
-          final list = (data['results'] as List);
-          callCenterSessions.assignAll(
-            list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
-          );
-        } else {
-          callCenterSessions.clear();
+          list = raw['results'] as List;
         }
+
+        final normalized = <JsonMap>[];
+        for (final item in list.whereType<Map>()) {
+          final m = Map<String, dynamic>.from(item);
+          final sessionId = m['id']?.toString() ?? m['session_id']?.toString();
+          final student = m['student'];
+          final peerName = student is Map
+              ? (student['full_name']?.toString() ?? '')
+              : (m['peer_name']?.toString() ?? '');
+          final lastMessage = m['last_message'];
+          final nodeTitleFromLast =
+              lastMessage is Map ? (lastMessage['text']?.toString() ?? '') : '';
+          normalized.add({
+            ...m,
+            // Keep compatibility with existing UI code that expects these keys.
+            'session_id': sessionId ?? '',
+            'peer_name': peerName,
+            'node_title': (m['node_title']?.toString() ?? nodeTitleFromLast),
+          });
+        }
+        callCenterSessions.assignAll(normalized);
       } else {
         log(
           'ChatController: loadCallCenterSessions failed: ${res.failure?.message}',
@@ -188,6 +207,106 @@ class ChatController extends GetxController {
       'session_id': sessionId,
       'allow': allow,
     });
+  }
+
+  Future<void> loadSessionMessages({required String sessionId}) async {
+    if (sessionId.trim().isEmpty) return;
+    if (isLoadingMessages.value) return;
+    isLoadingMessages.value = true;
+    try {
+      final res = await _network.request(
+        NetworkRequest(
+          route: NetworkRouter.callCenterSessions,
+          urlIdentifier: '/$sessionId/messages',
+          requestType: RequestType.get,
+          isAuthorizationRequired: true,
+        ),
+      );
+
+      if (res.status == NetworkResponseStatus.success) {
+        final raw = res.data;
+        List list = const [];
+        if (raw is List) {
+          list = raw;
+        } else if (raw is Map) {
+          // Common backend shapes (including nested pagination).
+          if (raw['data'] is List) {
+            list = raw['data'] as List;
+          } else if (raw['results'] is List) {
+            list = raw['results'] as List;
+          } else if (raw['messages'] is List) {
+            list = raw['messages'] as List;
+          } else if (raw['messages'] is Map) {
+            // backend shape: { session: {...}, messages: { next, ..., data: [...] } }
+            final m = raw['messages'] as Map;
+            if (m['data'] is List) {
+              list = m['data'] as List;
+            } else if (m['results'] is List) {
+              list = m['results'] as List;
+            }
+          } else if (raw['data'] is Map) {
+            final inner = raw['data'] as Map;
+            if (inner['data'] is List) {
+              list = inner['data'] as List;
+            } else if (inner['results'] is List) {
+              list = inner['results'] as List;
+            } else if (inner['messages'] is List) {
+              list = inner['messages'] as List;
+            } else if (inner['messages'] is Map) {
+              final im = inner['messages'] as Map;
+              if (im['data'] is List) {
+                list = im['data'] as List;
+              } else if (im['results'] is List) {
+                list = im['results'] as List;
+              }
+            }
+          }
+        }
+
+        final fetchedList = list.whereType<Map>().map((e) {
+          final msg = Map<String, dynamic>.from(e);
+          // Normalize keys so existing UI can render timestamps + dedupe reliably.
+          msg['session_id'] ??= sessionId;
+          msg['sent_at'] ??= msg['created_at'];
+          return msg;
+        }).toList();
+
+        DateTime parseTime(dynamic v) {
+          if (v is DateTime) return v;
+          if (v is String) return DateTime.tryParse(v) ?? DateTime(0);
+          return DateTime(0);
+        }
+
+        fetchedList.sort((a, b) {
+          final ta = parseTime(a['created_at'] ?? a['sent_at']);
+          final tb = parseTime(b['created_at'] ?? b['sent_at']);
+          return ta.compareTo(tb);
+        });
+
+        messages.assignAll(fetchedList);
+        _seenMessageKeys.clear();
+        for (final m in fetchedList) {
+          final k = _messageKey(m);
+          if (k.isNotEmpty) _seenMessageKeys.add(k);
+        }
+
+        if (fetchedList.isEmpty) {
+          log(
+            'ChatController: loadSessionMessages success but empty. rawType=${raw.runtimeType} keys=${raw is Map ? raw.keys.toList() : '—'}',
+          );
+        }
+      } else {
+        log('ChatController: loadSessionMessages failed.');
+        log('ChatController: status=failure message=${res.failure?.message}');
+        if (res.data != null) {
+          log('ChatController: failure data=${res.data}');
+        }
+      }
+    } catch (e) {
+      log('ChatController: loadSessionMessages exception: $e');
+    } finally {
+      isLoadingMessages.value = false;
+    }
   }
 
   void _handleEvent(JsonMap event) {
@@ -313,6 +432,8 @@ class ChatController extends GetxController {
     currentSessionId.value = sessionId;
     messages.clear();
     _seenMessageKeys.clear();
+    // Fetch old messages from REST so the chat isn't empty on open.
+    loadSessionMessages(sessionId: sessionId);
     Get.toNamed(
       '/chat/session',
       arguments: {

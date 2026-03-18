@@ -128,7 +128,10 @@ class _ChatsList extends StatelessWidget {
     );
   }
 
-  void _onAssignedTap(ChatController controller, Map<String, String> session) {
+  void _onAssignedTap(
+    ChatController controller,
+    Map<String, String> session,
+  ) {
     final sessionId = session['session_id'] ?? '';
     if (sessionId.isEmpty) return;
     final peerName = session['peer_name'];

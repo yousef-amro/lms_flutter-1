@@ -348,16 +348,15 @@ class ChatInboxScreen extends StatelessWidget {
                                       FilledButton(
                                         onPressed: sessionId.isEmpty
                                             ? null
-                                            : () async {
-                                                await controller.acceptChat(
-                                                  sessionId: sessionId,
-                                                );
-                                                controller.openSession(
+                                            : () => controller.openSession(
                                                   sessionId,
                                                   peerName: studentName,
-                                                  peerImage: peerImage?.isNotEmpty == true ? peerImage : null,
-                                                );
-                                              },
+                                                  peerImage: peerImage?.isNotEmpty == true
+                                                      ? peerImage
+                                                      : null,
+                                                  loadMessages: false,
+                                                  requiresAcceptance: true,
+                                                ),
                                         child: const Text('قبول'),
                                       ),
                                     ],

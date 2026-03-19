@@ -198,10 +198,10 @@ class _ChatsList extends StatelessWidget {
     );
   }
 
-  Future<void> _onChatTap(
+  void _onChatTap(
     ChatController controller,
     Map<String, dynamic> request,
-  ) async {
+  ) {
     final sessionId = request['session_id']?.toString() ?? '';
     if (sessionId.isEmpty) return;
     final student = request['student'];
@@ -212,11 +212,13 @@ class _ChatsList extends StatelessWidget {
       sessionId,
       fallback: request,
     );
-    await controller.acceptChat(sessionId: sessionId);
+    // Do not accept here — ChatSessionScreen asks first (نعم/لا).
     controller.openSession(
       sessionId,
-      peerName: peerName,
+      peerName: peerName?.trim().isNotEmpty == true ? peerName!.trim() : null,
       peerImage: peerImage?.trim().isNotEmpty == true ? peerImage!.trim() : null,
+      loadMessages: false,
+      requiresAcceptance: true,
     );
   }
 }

@@ -55,18 +55,27 @@ class HomeController extends GetxController {
     controller.openSession(sessionId, peerName: peerName);
   }
 
-  Future<void> onChatTap(
+  void onChatTap(
     ChatController controller,
     Map<String, dynamic> request,
-  ) async {
+  ) {
     final sessionId = request['session_id']?.toString() ?? '';
     if (sessionId.isEmpty) return;
     final student = request['student'];
     final peerName = student is Map
         ? (student['full_name']?.toString() ?? '')
         : null;
-    await controller.acceptChat(sessionId: sessionId);
-    controller.openSession(sessionId, peerName: peerName);
+    final peerImage = controller.getPeerImageForSession(
+      sessionId,
+      fallback: request,
+    );
+    controller.openSession(
+      sessionId,
+      peerName: peerName?.trim().isNotEmpty == true ? peerName!.trim() : null,
+      peerImage: peerImage?.trim().isNotEmpty == true ? peerImage!.trim() : null,
+      loadMessages: false,
+      requiresAcceptance: true,
+    );
   }
 }
 

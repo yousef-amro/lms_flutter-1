@@ -17,6 +17,11 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
   final _textController = TextEditingController();
   final _scroll = ScrollController();
 
+  bool _promptShown = false;
+  bool _requiresAcceptance = false;
+  bool _isAccepted = true;
+  String _sessionId = '';
+
   static const String _noCloseReasonSentinel = '__NO_CLOSE_REASON__';
 
   static const Color _onlineGreen = Color(0xFF00CD83);
@@ -24,6 +29,77 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
   static const Color _userBubbleGreen = Color(0xFF0BAC4B);
   static const Color _sendButtonBg = Color(0xFFE8F5E9);
   static const Color _sendButtonIcon = Color(0xFF2E7D32);
+
+  @override
+  void initState() {
+    super.initState();
+    final controller = Get.find<ChatController>();
+
+    final args = (Get.arguments is Map)
+        ? (Get.arguments as Map)
+        : <dynamic, dynamic>{};
+
+    _sessionId = (args['session_id']?.toString() ??
+            controller.currentSessionId.value ??
+            '')
+        .trim();
+    _requiresAcceptance = args['requires_acceptance'] == true ||
+        args['requires_acceptance']?.toString().toLowerCase() == 'true';
+
+    // If it doesn't require acceptance, enable the chat right away.
+    _isAccepted = !_requiresAcceptance;
+
+    if (!_requiresAcceptance || _sessionId.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _promptShown) return;
+      _promptShown = true;
+
+      final shouldAccept = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('تأكيد القبول'),
+            content: const Text('هل تريد قبول هذه المحادثة؟'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('لا'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('نعم'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (shouldAccept == true) {
+        try {
+          await controller.acceptChat(sessionId: _sessionId);
+          await controller.loadSessionMessages(sessionId: _sessionId);
+          if (!mounted) return;
+          setState(() {
+            _isAccepted = true;
+          });
+        } catch (_) {
+          Get.snackbar(
+            'خطأ',
+            'تعذر قبول المحادثة. حاول مرة أخرى.',
+            snackPosition: SnackPosition.TOP,
+          );
+        }
+      } else {
+        // لا — only go back; do not close on server or remove from incoming list.
+        controller.abandonSessionOpenWithoutClosing();
+        if (mounted) Get.back();
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -198,7 +274,23 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
         body: Column(
           children: [
             Expanded(
-              child: Obx(() {
+              // Pending accept: no Obx here — GetX errors if Obx returns without
+              // reading any .obs (e.g. before messages / loading are touched).
+              child: _requiresAcceptance && !_isAccepted
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'اختر قبول أو إلغاء المحادثة للبدء',
+                          style: AppTypography.bodyM.copyWith(
+                            color: colors.textDark.withValues(alpha: 0.65),
+                          ),
+                          textDirection: TextDirection.rtl,
+                        ),
+                      ),
+                    )
+                  : Obx(() {
+                final loading = controller.isLoadingMessages.value;
                 final msgs = controller.messages;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (_scroll.hasClients) {
@@ -213,7 +305,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
 
                 if (msgs.isEmpty) {
                   // While we fetch history, show a spinner instead of the empty-state text.
-                  if (controller.isLoadingMessages.value) {
+                  if (loading) {
                     return const Center(
                       child: Padding(
                         padding: EdgeInsets.all(24),
@@ -292,7 +384,9 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                 color: colors.scaffoldBackground,
                 child: _ChatInputBar(
                   textController: _textController,
+                  enabled: _isAccepted,
                   onSend: () {
+                    if (!_isAccepted) return;
                     final text = _textController.text.trim();
                     if (text.isEmpty || sessionId.isEmpty) return;
                     _textController.clear();
@@ -502,6 +596,7 @@ class _ChatInputBar extends StatelessWidget {
   const _ChatInputBar({
     required this.textController,
     required this.onSend,
+    required this.enabled,
     required this.colors,
     required this.sendButtonBg,
     required this.sendButtonIcon,
@@ -509,6 +604,7 @@ class _ChatInputBar extends StatelessWidget {
 
   final TextEditingController textController;
   final VoidCallback onSend;
+  final bool enabled;
   final ColorManager colors;
   final Color sendButtonBg;
   final Color sendButtonIcon;
@@ -536,6 +632,7 @@ class _ChatInputBar extends StatelessWidget {
               textDirection: TextDirection.rtl,
               maxLines: 4,
               minLines: 1,
+              enabled: enabled,
               decoration: InputDecoration(
                 hintText: 'اكتب رسالة…',
                 hintStyle: AppTypography.bodyS.withColor(
@@ -549,7 +646,7 @@ class _ChatInputBar extends StatelessWidget {
                   vertical: 14,
                 ),
               ),
-              onSubmitted: (_) => onSend(),
+              onSubmitted: enabled ? (_) => onSend() : null,
             ),
           ),
           Container(
@@ -559,7 +656,7 @@ class _ChatInputBar extends StatelessWidget {
             color: colors.divider,
           ),
           IconButton(
-            onPressed: () {},
+            onPressed: enabled ? () {} : null,
             icon: Icon(
               Icons.mic_none_outlined,
               color: colors.textDark,
@@ -575,7 +672,7 @@ class _ChatInputBar extends StatelessWidget {
             ),
           ),
           IconButton(
-            onPressed: () {},
+            onPressed: enabled ? () {} : null,
             icon: Icon(
               Icons.attach_file_rounded,
               color: colors.textDark,
@@ -600,7 +697,7 @@ class _ChatInputBar extends StatelessWidget {
               color: sendButtonBg,
               borderRadius: BorderRadius.circular(20),
               child: InkWell(
-                onTap: onSend,
+                onTap: enabled ? onSend : null,
                 borderRadius: BorderRadius.circular(20),
                 child: Padding(
                   padding: const EdgeInsets.all(10),

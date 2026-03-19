@@ -482,6 +482,67 @@ class ChatController extends GetxController {
     }
   }
 
+  String _previewTextFromMessage(JsonMap msg) {
+    final text = msg['text']?.toString().trim() ?? '';
+    if (text.isNotEmpty) return text;
+    final fileUrl = msg['file_url']?.toString().trim() ?? '';
+    if (fileUrl.isNotEmpty) return 'تم إرسال ملف';
+    return msg['message_type']?.toString().trim() ?? '';
+  }
+
+  /// Update "chat list" preview text immediately when a new message is sent/received.
+  /// Otherwise `home_screen.dart` keeps showing the old `node_title` until API refresh or open chat.
+  void _updateChatListPreviewFromMessage(JsonMap msg) {
+    final rawSessionId = msg['session_id']?.toString();
+    final sessionId = (rawSessionId ?? currentSessionId.value)?.trim();
+    if (sessionId == null || sessionId.isEmpty) return;
+
+    final preview = _previewTextFromMessage(msg);
+    if (preview.isEmpty) return;
+
+    var changed = false;
+
+    // Update "assigned" rows (persisted).
+    for (var i = 0; i < assignedSessions.length; i++) {
+      if (assignedSessions[i]['session_id'] == sessionId) {
+        final updated = Map<String, String>.from(assignedSessions[i]);
+        updated['node_title'] = preview;
+        assignedSessions[i] = updated;
+        changed = true;
+      }
+    }
+
+    // Update callCenterSessions so home_screen can show `fromApi['node_title']`.
+    for (var i = 0; i < callCenterSessions.length; i++) {
+      final s = callCenterSessions[i];
+      final id = (s['session_id'] ?? s['id']?.toString()).toString().trim();
+      if (id == sessionId) {
+        final updated = Map<String, dynamic>.from(s);
+        updated['node_title'] = preview;
+        callCenterSessions[i] = updated;
+        changed = true;
+      }
+    }
+
+    // Update "incoming" rows.
+    for (var i = 0; i < incomingRequests.length; i++) {
+      final r = incomingRequests[i];
+      final id = r['session_id']?.toString().trim();
+      if (id == sessionId) {
+        final updated = Map<String, dynamic>.from(r);
+        updated['node_title'] = preview;
+        incomingRequests[i] = updated;
+        changed = true;
+      }
+    }
+
+    if (!changed) return;
+    assignedSessionsUpdated.value++;
+    callCenterSessions.refresh();
+    assignedSessions.refresh();
+    incomingRequests.refresh();
+  }
+
   Future<void> requestChat({required String nodeId}) async {
     await _ws.sendAction('request_chat', {'node_id': nodeId});
   }
@@ -825,6 +886,7 @@ class ChatController extends GetxController {
         final msg = event['message'];
         if (msg is Map<String, dynamic>) {
           _addMessageDedup(msg);
+          _updateChatListPreviewFromMessage(msg);
         }
         break;
 
@@ -855,13 +917,32 @@ class ChatController extends GetxController {
     }
   }
 
-  void openSession(String sessionId, {String? peerName, String? peerImage}) {
+  /// User left the chat screen without accepting (لا) — do not notify the server;
+  /// keep the request in [incomingRequests] and clear local session UI state.
+  void abandonSessionOpenWithoutClosing() {
+    currentSessionId.value = null;
+    currentSessionPeerImage.value = null;
+    messages.clear();
+    _seenMessageKeys.clear();
+    isLoadingMessages.value = false;
+  }
+
+  void openSession(
+    String sessionId, {
+    String? peerName,
+    String? peerImage,
+    bool loadMessages = true,
+    bool requiresAcceptance = false,
+  }) {
     currentSessionId.value = sessionId;
     currentSessionPeerImage.value = _normalizeMediaUrl(peerImage);
     messages.clear();
     _seenMessageKeys.clear();
     // Fetch old messages from REST so the chat isn't empty on open.
-    loadSessionMessages(sessionId: sessionId);
+    // For pending requests we delay this until the user accepts.
+    if (loadMessages) {
+      loadSessionMessages(sessionId: sessionId);
+    }
     Get.toNamed(
       '/chat/session',
       arguments: {
@@ -869,6 +950,7 @@ class ChatController extends GetxController {
         if (peerName != null && peerName.isNotEmpty) 'peer_name': peerName,
         if (_normalizeMediaUrl(peerImage) != null)
           'peer_image': _normalizeMediaUrl(peerImage),
+        if (requiresAcceptance) 'requires_acceptance': true,
       },
     );
   }

@@ -161,3 +161,13 @@ flutter:
           weight: 500
         - asset: assets/fonts/SfPro-Bold.OTF
           weight: 700
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/images/logo.png
+  android: true
+  ios: true
+  web: false
+  android_12:
+    image: assets/images/logo.png
+    color: "#FFFFFF"

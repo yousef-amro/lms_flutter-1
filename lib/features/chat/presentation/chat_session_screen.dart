@@ -766,13 +766,14 @@ class _ChatInputBar extends StatelessWidget {
         children: [
           Expanded(
             child: TextField(
+              textAlign: TextAlign.right,
               controller: textController,
               textDirection: ui.TextDirection.rtl,
               maxLines: 4,
               minLines: 1,
               enabled: enabled,
               decoration: InputDecoration(
-                hintText: 'اكتب رسالة…',
+                hintText: '…اكتب رسالة',
                 hintStyle: AppTypography.bodyS.withColor(
                   colors.hintGray,
                 ),

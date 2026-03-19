@@ -3,6 +3,7 @@ import 'package:lms_app/core/cache/secure_storage_service.dart';
 
 import '../data/data_source/splash_remote_data_source.dart';
 import '../data/repository/splash_repo.dart';
+import '../presentation/splash_controller.dart';
 
 class SplashBinding extends Bindings {
   @override
@@ -16,6 +17,10 @@ class SplashBinding extends Bindings {
         secureStorageService: SecureStorageService(),
         remoteDataSource: Get.find(),
       ),
+    );
+
+    Get.lazyPut<SplashController>(
+      () => SplashController(repository: Get.find()),
     );
   }
 }

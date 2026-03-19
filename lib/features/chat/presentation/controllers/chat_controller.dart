@@ -3,6 +3,7 @@ import 'dart:developer';
 
 import 'package:get/get.dart';
 
+import '../../../../environments/app_environments.dart';
 import '../../../../core/cache/local_storage_service.dart';
 import '../../../../core/data/networking/data/network_request.dart';
 import '../../../../core/data/networking/data/network_response.dart';
@@ -31,16 +32,22 @@ class ChatController extends GetxController {
 
   final messages = <JsonMap>[].obs;
   final isLoadingMessages = false.obs;
+  /// Peer profile image URL for the current chat session (from session.student or session.call_center).
+  final currentSessionPeerImage = RxnString();
   final incomingRequests = <JsonMap>[].obs;
   /// Sessions this agent has accepted (persisted so they survive app restart).
   final assignedSessions = <Map<String, String>>[].obs;
   /// All call-center sessions fetched from REST API.
   final callCenterSessions = <JsonMap>[].obs;
   final isLoadingCallCenterSessions = false.obs;
+  final callCenterSessionsUpdated = 0.obs;
+  /// Bump when assignedSessions are updated with API data (e.g. peer_image) so list avatars rebuild.
+  final assignedSessionsUpdated = 0.obs;
   final recentEventTypes = <String>[].obs;
 
   /// Avoid duplicates when backend emits both `message_sent` and `new_message`.
   final LinkedHashSet<String> _seenMessageKeys = LinkedHashSet<String>();
+  final Set<String> _peerImageHydrationInFlight = <String>{};
 
   @override
   void onInit() {
@@ -101,11 +108,108 @@ class ChatController extends GetxController {
 
   void _loadAssignedSessions() {
     final stored = LocalStorageService().getAssignedChatSessions();
-    assignedSessions.assignAll(stored);
+    assignedSessions.assignAll(
+      stored
+          .map((session) => {
+                ...session,
+                'peer_image': _normalizeMediaUrl(session['peer_image']) ?? '',
+              })
+          .toList(),
+    );
   }
 
   Future<void> _persistAssignedSessions() async {
     await LocalStorageService().setAssignedChatSessions(assignedSessions.toList());
+  }
+
+  String? _normalizeMediaUrl(String? value) {
+    final raw = value?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+
+    final baseUrl =
+        AppEnvironmentHelper().getEnvironmentVariable('BASE_URL')?.toString().trim();
+    if (baseUrl == null || baseUrl.isEmpty) {
+      return raw;
+    }
+
+    final normalizedBase = baseUrl.endsWith('/')
+        ? baseUrl.substring(0, baseUrl.length - 1)
+        : baseUrl;
+    final normalizedPath = raw.startsWith('/') ? raw : '/$raw';
+    return '$normalizedBase$normalizedPath';
+  }
+
+  JsonMap? getCallCenterSessionById(String? sessionId) {
+    final id = sessionId?.trim() ?? '';
+    if (id.isEmpty) return null;
+    return callCenterSessions.firstWhereOrNull((session) {
+      final currentId =
+          (session['session_id'] ?? session['id']?.toString() ?? '')
+              .toString()
+              .trim();
+      return currentId == id;
+    });
+  }
+
+  String? _extractPeerImageFromSessionMap(Map<dynamic, dynamic>? session) {
+    if (session == null) return null;
+
+    final student = session['student'];
+    if (student is Map) {
+      final studentImage = _normalizeMediaUrl(student['image']?.toString());
+      if (studentImage != null && studentImage.isNotEmpty) return studentImage;
+    }
+
+    final directPeerImage = _normalizeMediaUrl(session['peer_image']?.toString());
+    if (directPeerImage != null && directPeerImage.isNotEmpty) {
+      return directPeerImage;
+    }
+
+    final lastMessage = session['last_message'];
+    if (lastMessage is Map) {
+      final receiver = lastMessage['receiver'];
+      if (receiver is Map) {
+        final receiverImage = _normalizeMediaUrl(receiver['image']?.toString());
+        if (receiverImage != null && receiverImage.isNotEmpty) {
+          return receiverImage;
+        }
+      }
+      final sender = lastMessage['sender'];
+      if (sender is Map) {
+        final senderImage = _normalizeMediaUrl(sender['image']?.toString());
+        if (senderImage != null && senderImage.isNotEmpty) {
+          return senderImage;
+        }
+      }
+    }
+
+    final callCenter = session['call_center'];
+    if (callCenter is Map) {
+      final callCenterImage =
+          _normalizeMediaUrl(callCenter['image']?.toString());
+      if (callCenterImage != null && callCenterImage.isNotEmpty) {
+        return callCenterImage;
+      }
+    }
+
+    return null;
+  }
+
+  String? getPeerImageForSession(
+    String? sessionId, {
+    Map<dynamic, dynamic>? fallback,
+  }) {
+    final fromApi = getCallCenterSessionById(sessionId);
+    final apiImage = _extractPeerImageFromSessionMap(fromApi);
+    if (apiImage != null && apiImage.isNotEmpty) return apiImage;
+
+    final fallbackImage = _extractPeerImageFromSessionMap(fallback);
+    if (fallbackImage != null && fallbackImage.isNotEmpty) return fallbackImage;
+
+    return null;
   }
 
   Future<void> connect() async {
@@ -152,15 +256,30 @@ class ChatController extends GetxController {
           final lastMessage = m['last_message'];
           final nodeTitleFromLast =
               lastMessage is Map ? (lastMessage['text']?.toString() ?? '') : '';
+          final peerImage = _normalizeMediaUrl(
+                student is Map ? student['image']?.toString() : null,
+              ) ??
+              '';
           normalized.add({
             ...m,
             // Keep compatibility with existing UI code that expects these keys.
             'session_id': sessionId ?? '',
             'peer_name': peerName,
             'node_title': (m['node_title']?.toString() ?? nodeTitleFromLast),
+            'peer_image': peerImage,
+            if (student is Map)
+              'student': {
+                ...Map<String, dynamic>.from(student),
+                'image': peerImage.isNotEmpty
+                    ? peerImage
+                    : _normalizeMediaUrl(student['image']?.toString()),
+              },
           });
         }
         callCenterSessions.assignAll(normalized);
+        callCenterSessionsUpdated.value++;
+        // Merge peer_image (and name/title) into assignedSessions so avatars show immediately and after next app open.
+        _mergeApiSessionDataIntoAssigned(normalized);
       } else {
         log(
           'ChatController: loadCallCenterSessions failed: ${res.failure?.message}',
@@ -170,6 +289,196 @@ class ChatController extends GetxController {
       log('ChatController: loadCallCenterSessions exception: $e');
     } finally {
       isLoadingCallCenterSessions.value = false;
+    }
+  }
+
+  void _applyPeerImageUpdate({
+    required String sessionId,
+    required String peerImage,
+  }) {
+    final id = sessionId.trim();
+    final img = _normalizeMediaUrl(peerImage)?.trim() ?? '';
+    if (id.isEmpty || img.isEmpty) return;
+
+    var assignedChanged = false;
+    final updatedAssigned = <Map<String, String>>[];
+    for (final s in assignedSessions) {
+      final sid = (s['session_id'] ?? '').trim();
+      if (sid != id) {
+        updatedAssigned.add(Map<String, String>.from(s));
+        continue;
+      }
+      final existing = (s['peer_image'] ?? '').trim();
+      if (existing == img) {
+        updatedAssigned.add(Map<String, String>.from(s));
+        continue;
+      }
+      // Only fill if empty; don't override a non-empty avatar.
+      if (existing.isNotEmpty) {
+        updatedAssigned.add(Map<String, String>.from(s));
+        continue;
+      }
+      assignedChanged = true;
+      updatedAssigned.add({
+        ...s,
+        'peer_image': img,
+      });
+    }
+
+    if (assignedChanged) {
+      assignedSessions.assignAll(updatedAssigned);
+      assignedSessionsUpdated.value++;
+      _persistAssignedSessions();
+    }
+
+    // Update callCenterSessions list item if present (so HomeScreen can pick it up).
+    final idx = callCenterSessions.indexWhere((s) {
+      final sid = (s['session_id'] ?? s['id']?.toString() ?? '').toString().trim();
+      return sid == id;
+    });
+    if (idx >= 0) {
+      final old = callCenterSessions[idx];
+      final m = Map<String, dynamic>.from(old);
+      final existing = (m['peer_image']?.toString() ?? '').trim();
+      if (existing.isEmpty) {
+        m['peer_image'] = img;
+      }
+      final student = m['student'];
+      if (student is Map) {
+        final st = Map<String, dynamic>.from(student);
+        final stImg = (st['image']?.toString() ?? '').trim();
+        if (stImg.isEmpty) st['image'] = img;
+        m['student'] = st;
+      }
+      callCenterSessions[idx] = m;
+      callCenterSessionsUpdated.value++;
+    }
+
+    // Update pending WS requests if we can.
+    final rIdx = incomingRequests.indexWhere(
+      (r) => r['session_id']?.toString().trim() == id,
+    );
+    if (rIdx >= 0) {
+      final old = incomingRequests[rIdx];
+      final m = Map<String, dynamic>.from(old);
+      final student = m['student'];
+      if (student is Map) {
+        final st = Map<String, dynamic>.from(student);
+        final stImg = (st['image']?.toString() ?? '').trim();
+        if (stImg.isEmpty) st['image'] = img;
+        m['student'] = st;
+      }
+      incomingRequests[rIdx] = m;
+    }
+  }
+
+  JsonMap? _extractSessionFromMessagesResponse(dynamic raw) {
+    if (raw is Map) {
+      final direct = raw['session'];
+      if (direct is Map) return Map<String, dynamic>.from(direct);
+      final data = raw['data'];
+      if (data is Map) {
+        final s = data['session'];
+        if (s is Map) return Map<String, dynamic>.from(s);
+        final inner = data['data'];
+        if (inner is Map) {
+          final ss = inner['session'];
+          if (ss is Map) return Map<String, dynamic>.from(ss);
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _peerImageFromSession(JsonMap session) {
+    final student = session['student'];
+    final callCenter = session['call_center'];
+    final studentImage = _normalizeMediaUrl(
+      student is Map ? student['image']?.toString() : null,
+    );
+    if (studentImage != null && studentImage.isNotEmpty) return studentImage;
+    final callCenterImage = _normalizeMediaUrl(
+      callCenter is Map ? callCenter['image']?.toString() : null,
+    );
+    if (callCenterImage != null && callCenterImage.isNotEmpty) {
+      return callCenterImage;
+    }
+    return null;
+  }
+
+  Future<void> hydratePeerImageForSession(String sessionId) async {
+    final id = sessionId.trim();
+    if (id.isEmpty) return;
+    if (_peerImageHydrationInFlight.contains(id)) return;
+    _peerImageHydrationInFlight.add(id);
+    try {
+      final res = await _network.request(
+        NetworkRequest(
+          route: NetworkRouter.callCenterSessions,
+          urlIdentifier: '/$id/messages',
+          requestType: RequestType.get,
+          isAuthorizationRequired: true,
+        ),
+      );
+      if (res.status != NetworkResponseStatus.success) return;
+      final session = _extractSessionFromMessagesResponse(res.data);
+      if (session == null) return;
+      final img = _peerImageFromSession(session);
+      if (img == null || img.isEmpty) return;
+      _applyPeerImageUpdate(sessionId: id, peerImage: img);
+    } catch (e) {
+      log('ChatController: hydratePeerImageForSession($id) exception: $e');
+    } finally {
+      _peerImageHydrationInFlight.remove(id);
+    }
+  }
+
+  void _mergeApiSessionDataIntoAssigned(List<dynamic> apiSessions) {
+    final byId = <String, JsonMap>{};
+    for (final s in apiSessions) {
+      if (s is! Map) continue;
+      final id = (s['id'] ?? s['session_id'])?.toString().trim();
+      if (id != null && id.isNotEmpty) byId[id] = Map<String, dynamic>.from(s);
+    }
+    if (byId.isEmpty) return;
+    final updated = <Map<String, String>>[];
+    for (final assigned in assignedSessions) {
+      final sessionId = (assigned['session_id'] ?? '').trim();
+      if (sessionId.isEmpty) {
+        updated.add(Map<String, String>.from(assigned));
+        continue;
+      }
+      final api = byId[sessionId];
+      if (api == null) {
+        updated.add(Map<String, String>.from(assigned));
+        continue;
+      }
+      final student = api['student'];
+      final peerName = student is Map
+          ? (student['full_name']?.toString() ?? '').trim()
+          : (api['peer_name']?.toString() ?? '').trim();
+      final peerImage =
+          _normalizeMediaUrl(
+            student is Map
+                ? student['image']?.toString()
+                : api['peer_image']?.toString(),
+          ) ??
+          '';
+      final lastMessage = api['last_message'];
+      final nodeTitle = lastMessage is Map
+          ? (lastMessage['text']?.toString() ?? '').trim()
+          : (api['node_title']?.toString() ?? '').trim();
+      updated.add({
+        'session_id': sessionId,
+        'peer_name': peerName.isNotEmpty ? peerName : (assigned['peer_name'] ?? ''),
+        'node_title': nodeTitle.isNotEmpty ? nodeTitle : (assigned['node_title'] ?? ''),
+        'peer_image': peerImage.isNotEmpty ? peerImage : (assigned['peer_image'] ?? ''),
+      });
+    }
+    if (updated.isNotEmpty) {
+      assignedSessions.assignAll(updated);
+      assignedSessionsUpdated.value++;
+      _persistAssignedSessions();
     }
   }
 
@@ -345,6 +654,29 @@ class ChatController extends GetxController {
           if (k.isNotEmpty) _seenMessageKeys.add(k);
         }
 
+        // Extract peer profile image from session (call_center sees student, student sees call_center).
+        if (raw is Map) {
+          final session = raw['session'];
+          if (session is Map) {
+            final student = session['student'];
+            final callCenter = session['call_center'];
+            if (student is Map && student['image'] != null) {
+              final img = _normalizeMediaUrl(student['image']?.toString()) ?? '';
+              currentSessionPeerImage.value = img;
+              if (img.isNotEmpty) {
+                _applyPeerImageUpdate(sessionId: sessionId, peerImage: img);
+              }
+            } else if (callCenter is Map && callCenter['image'] != null) {
+              final img =
+                  _normalizeMediaUrl(callCenter['image']?.toString()) ?? '';
+              currentSessionPeerImage.value = img;
+              if (img.isNotEmpty) {
+                _applyPeerImageUpdate(sessionId: sessionId, peerImage: img);
+              }
+            }
+          }
+        }
+
         if (fetchedList.isEmpty) {
           log(
             'ChatController: loadSessionMessages success but empty. rawType=${raw.runtimeType} keys=${raw is Map ? raw.keys.toList() : '—'}',
@@ -392,7 +724,21 @@ class ChatController extends GetxController {
 
       case 'new_chat_request':
         // Call center only
-        incomingRequests.insert(0, event);
+        final normalizedEvent = Map<String, dynamic>.from(event);
+        final student = normalizedEvent['student'];
+        if (student is Map) {
+          final studentMap = Map<String, dynamic>.from(student);
+          studentMap['image'] = _normalizeMediaUrl(studentMap['image']?.toString());
+          normalizedEvent['student'] = studentMap;
+        }
+        incomingRequests.insert(0, normalizedEvent);
+        final sid = event['session_id']?.toString();
+        if (sid != null && sid.trim().isNotEmpty) {
+          // Refresh sessions so the request can pick up peer_image from REST API.
+          loadCallCenterSessions();
+          // Best-effort: some backends only include the avatar inside the messages payload.
+          hydratePeerImageForSession(sid);
+        }
         break;
 
       case 'chat_request_created':
@@ -423,28 +769,54 @@ class ChatController extends GetxController {
               break;
             }
           }
+          final sessionMap = session is Map ? session : null;
+          final studentMap = sessionMap?['student'];
           String peerName = '';
           String nodeTitle = '';
+          String peerImage = '';
           if (request != null) {
             final student = request['student'];
             peerName = student is Map
                 ? (student['full_name']?.toString() ?? '')
                 : '';
             nodeTitle = request['node_title']?.toString() ?? '';
+            peerImage = _normalizeMediaUrl(
+                  student is Map ? student['image']?.toString() : null,
+                ) ??
+                '';
             incomingRequests.removeWhere(
               (r) => r['session_id']?.toString() == sessionId,
             );
+          }
+          if (studentMap is Map) {
+            if (peerName.isEmpty) peerName = studentMap['full_name']?.toString() ?? '';
+            if (peerImage.isEmpty) {
+              peerImage =
+                  _normalizeMediaUrl(studentMap['image']?.toString()) ?? '';
+            }
+            final lastMsg = sessionMap?['last_message'];
+            if (nodeTitle.isEmpty && lastMsg is Map) {
+              nodeTitle = lastMsg['text']?.toString() ?? '';
+            }
           }
           final entry = <String, String>{
             'session_id': sessionId,
             'peer_name': peerName,
             'node_title': nodeTitle,
+            'peer_image': peerImage,
           };
           assignedSessions.removeWhere(
             (s) => s['session_id'] == sessionId,
           );
           assignedSessions.insert(0, entry);
+          assignedSessionsUpdated.value++;
           _persistAssignedSessions();
+          // Refetch sessions so new chat gets peer_image from API and list avatar updates.
+          loadCallCenterSessions();
+          if (peerImage.trim().isEmpty) {
+            // Some backends only include the participant avatar in the messages endpoint.
+            hydratePeerImageForSession(sessionId);
+          }
         }
         break;
 
@@ -483,8 +855,9 @@ class ChatController extends GetxController {
     }
   }
 
-  void openSession(String sessionId, {String? peerName}) {
+  void openSession(String sessionId, {String? peerName, String? peerImage}) {
     currentSessionId.value = sessionId;
+    currentSessionPeerImage.value = _normalizeMediaUrl(peerImage);
     messages.clear();
     _seenMessageKeys.clear();
     // Fetch old messages from REST so the chat isn't empty on open.
@@ -494,6 +867,8 @@ class ChatController extends GetxController {
       arguments: {
         'session_id': sessionId,
         if (peerName != null && peerName.isNotEmpty) 'peer_name': peerName,
+        if (_normalizeMediaUrl(peerImage) != null)
+          'peer_image': _normalizeMediaUrl(peerImage),
       },
     );
   }

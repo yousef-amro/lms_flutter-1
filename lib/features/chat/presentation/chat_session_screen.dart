@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../core/presentation/theme/color_manager.dart';
 import '../../../core/presentation/theme/text_manager.dart';
@@ -38,12 +39,14 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
     final controller = Get.find<ChatController>();
     final isArabic = Get.locale?.languageCode.toLowerCase() == 'ar';
 
-    final args =
-        (Get.arguments is Map) ? (Get.arguments as Map) : <dynamic, dynamic>{};
-    final sessionId = (args['session_id']?.toString() ??
-            controller.currentSessionId.value ??
-            '')
-        .trim();
+    final args = (Get.arguments is Map)
+        ? (Get.arguments as Map)
+        : <dynamic, dynamic>{};
+    final sessionId =
+        (args['session_id']?.toString() ??
+                controller.currentSessionId.value ??
+                '')
+            .trim();
     final peerName = args['peer_name']?.toString() ?? 'محادثة مباشرة';
 
     return Directionality(
@@ -53,15 +56,62 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
         appBar: AppBar(
           backgroundColor: colors.cardBackground,
           elevation: 0,
-          leading: IconButton(
-            icon: Icon(
-              isArabic
-                  ? Icons.arrow_back_ios_rounded
-                  : Icons.arrow_forward_ios_rounded,
-              size: 20,
-              color: colors.textDark,
-            ),
-            onPressed: () => Get.back(),
+          // Place "close chat" next to the back button (like the screenshot).
+          leadingWidth: sessionId.isNotEmpty ? 120 : 56,
+          leading: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: Icon(
+                  isArabic
+                      ? Icons.arrow_back_ios_rounded
+                      : Icons.arrow_forward_ios_rounded,
+                  size: 20,
+                  color: colors.textDark,
+                ),
+                onPressed: () => Get.back(),
+              ),
+              if (sessionId.isNotEmpty) ...[
+                IconButton(
+                  onPressed: () async {
+                    final closeReasonId =
+                        await showModalBottomSheet<String?>(
+                          context: context,
+                          backgroundColor: Colors.transparent,
+                          isScrollControlled: true,
+                          builder: (sheetContext) {
+                            return _CloseChatReasonSheet(
+                              controller: controller,
+                              colors: colors,
+                            );
+                          },
+                        );
+
+                    if (!mounted) return;
+                    if (closeReasonId == null) return;
+
+                    if (closeReasonId ==
+                        _ChatSessionScreenState
+                            ._noCloseReasonSentinel) {
+                      await controller.closeChat(
+                        sessionId: sessionId,
+                      );
+                    } else {
+                      await controller.closeChat(
+                        sessionId: sessionId,
+                        closeReasonId: closeReasonId,
+                      );
+                    }
+                    if (mounted) Get.back();
+                  },
+                  icon: SvgPicture.asset(
+                    'assets/images/svg/message-tick.svg',
+                    width: 24,
+                    height: 24,
+                  ),
+                ),
+              ],
+            ],
           ),
           titleSpacing: 0,
           title: Row(
@@ -110,51 +160,40 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: colors.primary.withValues(alpha: 0.12),
-                child: Icon(
-                  Icons.person_rounded,
-                  color: colors.infoBlue,
-                  size: 28,
-                ),
-              ),
+              Obx(() {
+                final argsImage = args['peer_image']
+                    ?.toString()
+                    .trim();
+                final apiImage = controller
+                    .currentSessionPeerImage
+                    .value
+                    ?.trim();
+                final imageUrl =
+                    (argsImage != null && argsImage.isNotEmpty)
+                    ? argsImage
+                    : apiImage;
+                final hasImage =
+                    imageUrl != null && imageUrl.isNotEmpty;
+                return CircleAvatar(
+                  radius: 22,
+                  backgroundColor: hasImage
+                      ? null
+                      : colors.primary.withValues(alpha: 0.12),
+                  backgroundImage: hasImage
+                      ? NetworkImage(imageUrl)
+                      : null,
+                  child: hasImage
+                      ? null
+                      : Icon(
+                          Icons.person_rounded,
+                          color: colors.infoBlue,
+                          size: 28,
+                        ),
+                );
+              }),
               const SizedBox(width: 12),
             ],
           ),
-          actions: [
-            if (sessionId.isNotEmpty)
-              IconButton(
-                onPressed: () async {
-                  final closeReasonId = await showModalBottomSheet<String?>(
-                    context: context,
-                    backgroundColor: Colors.transparent,
-                    isScrollControlled: true,
-                    builder: (sheetContext) {
-                      return _CloseChatReasonSheet(
-                        controller: controller,
-                        colors: colors,
-                      );
-                    },
-                  );
-
-                  if (!mounted) return;
-                  if (closeReasonId == null) return;
-
-                  if (closeReasonId ==
-                      _ChatSessionScreenState._noCloseReasonSentinel) {
-                    await controller.closeChat(sessionId: sessionId);
-                  } else {
-                    await controller.closeChat(
-                      sessionId: sessionId,
-                      closeReasonId: closeReasonId,
-                    );
-                  }
-                  if (mounted) Get.back();
-                },
-                icon: Icon(Icons.close, color: colors.textDark, size: 22),
-              ),
-          ],
         ),
         body: Column(
           children: [
@@ -189,7 +228,9 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                         child: Text(
                           'ابدأ المحادثة الآن',
                           style: AppTypography.bodyM.copyWith(
-                            color: colors.textDark.withValues(alpha: 0.65),
+                            color: colors.textDark.withValues(
+                              alpha: 0.65,
+                            ),
                           ),
                           textDirection: TextDirection.rtl,
                         ),
@@ -202,19 +243,22 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                         ? (m['sender'] as Map<String, dynamic>)
                         : null;
                     final senderId = sender?['id']?.toString();
-                    final isFromMe = controller.userId.value != null &&
+                    final isFromMe =
+                        controller.userId.value != null &&
                         senderId == controller.userId.value;
                     final text = (m['text']?.toString() ?? '').trim();
                     final fileUrl = m['file_url']?.toString();
-                    final content =
-                        text.isNotEmpty ? text : (fileUrl ?? '');
+                    final content = text.isNotEmpty
+                        ? text
+                        : (fileUrl ?? '');
                     final sentAt = m['sent_at'];
                     DateTime timestamp = DateTime.now();
                     if (sentAt != null) {
                       if (sentAt is DateTime) {
                         timestamp = sentAt;
                       } else if (sentAt is String) {
-                        timestamp = DateTime.tryParse(sentAt) ?? timestamp;
+                        timestamp =
+                            DateTime.tryParse(sentAt) ?? timestamp;
                       }
                     }
 
@@ -312,8 +356,9 @@ class _ChatBubble extends StatelessWidget {
   final ColorManager colors;
 
   static String _formatTime12h(DateTime t) {
-    final hour =
-        t.hour > 12 ? t.hour - 12 : (t.hour == 0 ? 12 : t.hour);
+    final hour = t.hour > 12
+        ? t.hour - 12
+        : (t.hour == 0 ? 12 : t.hour);
     final amPm = t.hour >= 12 ? 'PM' : 'AM';
     return '${hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} $amPm';
   }
@@ -493,7 +538,9 @@ class _ChatInputBar extends StatelessWidget {
               minLines: 1,
               decoration: InputDecoration(
                 hintText: 'اكتب رسالة…',
-                hintStyle: AppTypography.bodyS.withColor(colors.hintGray),
+                hintStyle: AppTypography.bodyS.withColor(
+                  colors.hintGray,
+                ),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -518,8 +565,14 @@ class _ChatInputBar extends StatelessWidget {
               color: colors.textDark,
               size: 22,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 12,
+            ),
+            constraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 40,
+            ),
           ),
           IconButton(
             onPressed: () {},
@@ -528,11 +581,21 @@ class _ChatInputBar extends StatelessWidget {
               color: colors.textDark,
               size: 22,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 12,
+            ),
+            constraints: const BoxConstraints(
+              minWidth: 40,
+              minHeight: 40,
+            ),
           ),
           Padding(
-            padding: const EdgeInsets.only(right: 6, top: 6, bottom: 6),
+            padding: const EdgeInsets.only(
+              right: 6,
+              top: 6,
+              bottom: 6,
+            ),
             child: Material(
               color: sendButtonBg,
               borderRadius: BorderRadius.circular(20),
@@ -566,10 +629,12 @@ class _CloseChatReasonSheet extends StatefulWidget {
   final ColorManager colors;
 
   @override
-  State<_CloseChatReasonSheet> createState() => _CloseChatReasonSheetState();
+  State<_CloseChatReasonSheet> createState() =>
+      _CloseChatReasonSheetState();
 }
 
-class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
+class _CloseChatReasonSheetState
+    extends State<_CloseChatReasonSheet> {
   bool _isLoading = true;
   String? _errorMessage;
   String? _selectedReasonId;
@@ -597,7 +662,9 @@ class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
       setState(() {
         _isLoading = false;
         final msg = e.toString();
-        _errorMessage = msg.isNotEmpty ? msg : 'تعذر تحميل أسباب الإغلاق';
+        _errorMessage = msg.isNotEmpty
+            ? msg
+            : 'تعذر تحميل أسباب الإغلاق';
       });
       return;
     }
@@ -605,7 +672,8 @@ class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
     final activeReasons = reasons
         .where((r) {
           final v = r['is_active'];
-          return v == true || (v is String && v.toLowerCase() == 'true');
+          return v == true ||
+              (v is String && v.toLowerCase() == 'true');
         })
         .toList(growable: false);
 
@@ -663,107 +731,118 @@ class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
                 const SizedBox(height: 12),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? const Center(
+                          child: CircularProgressIndicator(),
+                        )
                       : _errorMessage != null
-                          ? Center(
-                              child: Text(
-                                _errorMessage!,
-                                style: AppTypography.bodyS.copyWith(
-                                  color: widget.colors.error,
-                                  fontFamily: AppFonts.ffShamelFamily,
-                                ),
-                                textDirection: TextDirection.rtl,
-                              ),
-                            )
-                          : _reasons.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'لا توجد أسباب متاحة للإغلاق',
-                                    style: AppTypography.bodyS.copyWith(
-                                      color: widget.colors.textMuted,
-                                      fontFamily: AppFonts.ffShamelFamily,
-                                    ),
-                                    textDirection: TextDirection.rtl,
-                                  ),
-                                )
-                              : ListView.separated(
-                                  itemCount: _reasons.length,
-                                  separatorBuilder: (context, index) =>
-                                      const SizedBox(height: 10),
-                                  padding: EdgeInsets.zero,
-                                  itemBuilder: (context, index) {
-                                    final reason = _reasons[index];
-                                    final id =
-                                        reason['id']?.toString() ?? '';
-                                    final name =
-                                        reason['name']?.toString() ?? '';
-                                    final isSelected =
-                                        _selectedReasonId == id;
+                      ? Center(
+                          child: Text(
+                            _errorMessage!,
+                            style: AppTypography.bodyS.copyWith(
+                              color: widget.colors.error,
+                              fontFamily: AppFonts.ffShamelFamily,
+                            ),
+                            textDirection: TextDirection.rtl,
+                          ),
+                        )
+                      : _reasons.isEmpty
+                      ? Center(
+                          child: Text(
+                            'لا توجد أسباب متاحة للإغلاق',
+                            style: AppTypography.bodyS.copyWith(
+                              color: widget.colors.textMuted,
+                              fontFamily: AppFonts.ffShamelFamily,
+                            ),
+                            textDirection: TextDirection.rtl,
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: _reasons.length,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: 10),
+                          padding: EdgeInsets.zero,
+                          itemBuilder: (context, index) {
+                            final reason = _reasons[index];
+                            final id = reason['id']?.toString() ?? '';
+                            final name =
+                                reason['name']?.toString() ?? '';
+                            final isSelected =
+                                _selectedReasonId == id;
 
-                                    return Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius:
-                                            BorderRadius.circular(16),
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedReasonId = id;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 14,
-                                            vertical: 12,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? primary.withValues(alpha: 0.08)
-                                                : widget.colors.cardBackground,
-                                            borderRadius:
-                                                BorderRadius.circular(16),
-                                            border: Border.all(
-                                              color: isSelected
-                                                  ? primary
-                                                  : widget.colors.divider,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            textDirection: TextDirection.rtl,
-                                            children: [
-                                              Icon(
-                                                isSelected
-                                                    ? Icons
-                                                        .radio_button_checked_rounded
-                                                    : Icons
-                                                        .radio_button_off_rounded,
-                                                color: isSelected ? primary : widget.colors.textMuted,
-                                                size: 20,
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(
+                                  16,
+                                ),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedReasonId = id;
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? primary.withValues(
+                                            alpha: 0.08,
+                                          )
+                                        : widget
+                                              .colors
+                                              .cardBackground,
+                                    borderRadius:
+                                        BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? primary
+                                          : widget.colors.divider,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    textDirection: TextDirection.rtl,
+                                    children: [
+                                      Icon(
+                                        isSelected
+                                            ? Icons
+                                                  .radio_button_checked_rounded
+                                            : Icons
+                                                  .radio_button_off_rounded,
+                                        color: isSelected
+                                            ? primary
+                                            : widget.colors.textMuted,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          style: AppTypography
+                                              .bodyS
+                                              .semiBold
+                                              .copyWith(
+                                                fontFamily: AppFonts
+                                                    .ffShamelFamily,
+                                                color: widget
+                                                    .colors
+                                                    .textDark,
                                               ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Text(
-                                                  name,
-                                                  style: AppTypography.bodyS
-                                                      .semiBold
-                                                      .copyWith(
-                                                    fontFamily:
-                                                        AppFonts.ffShamelFamily,
-                                                    color: widget.colors.textDark,
-                                                  ),
-                                                  textDirection:
-                                                      TextDirection.rtl,
-                                                  maxLines: 2,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                          textDirection:
+                                              TextDirection.rtl,
+                                          maxLines: 2,
+                                          overflow:
+                                              TextOverflow.ellipsis,
                                         ),
                                       ),
-                                    );
-                                  },
+                                    ],
+                                  ),
                                 ),
+                              ),
+                            );
+                          },
+                        ),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -778,16 +857,19 @@ class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
                           side: BorderSide(
                             color: widget.colors.divider,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(22),
                           ),
                         ),
                         child: Text(
                           'الإلغاء',
-                          style: AppTypography.bodyM.semiBold.copyWith(
-                            fontFamily: AppFonts.ffShamelFamily,
-                          ),
+                          style: AppTypography.bodyM.semiBold
+                              .copyWith(
+                                fontFamily: AppFonts.ffShamelFamily,
+                              ),
                         ),
                       ),
                     ),
@@ -798,7 +880,10 @@ class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
                             ? null
                             : () {
                                 if (_selectedReasonId != null) {
-                                  Navigator.pop(context, _selectedReasonId);
+                                  Navigator.pop(
+                                    context,
+                                    _selectedReasonId,
+                                  );
                                 } else {
                                   Navigator.pop(
                                     context,
@@ -810,20 +895,23 @@ class _CloseChatReasonSheetState extends State<_CloseChatReasonSheet> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: widget.colors.error,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(22),
                           ),
-                          disabledBackgroundColor:
-                              widget.colors.error.withValues(alpha: 0.45),
+                          disabledBackgroundColor: widget.colors.error
+                              .withValues(alpha: 0.45),
                         ),
                         child: Text(
                           _selectedReasonId != null
                               ? 'تأكيد إغلاق'
                               : 'تأكيد إغلاق بدون سبب',
-                          style: AppTypography.bodyM.semiBold.copyWith(
-                            fontFamily: AppFonts.ffShamelFamily,
-                          ),
+                          style: AppTypography.bodyM.semiBold
+                              .copyWith(
+                                fontFamily: AppFonts.ffShamelFamily,
+                              ),
                         ),
                       ),
                     ),

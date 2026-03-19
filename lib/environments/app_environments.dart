@@ -10,7 +10,7 @@ enum AppEnvironments {
         return {
           'BASE_URL': 'https://lms-giwum.ondigitalocean.app',
           'WEBSOCKET_URL':
-              'wss://sound-level.vision-jo.com/ws/sensor-data/',
+              'wss://lms-giwum.ondigitalocean.app/ws/chat/',
           // 'firebase_options':
           //     firebase_supervision.DefaultFirebaseOptions.currentPlatform,
           // 'firebase_name': 'sound-level-28c39',
@@ -19,7 +19,7 @@ enum AppEnvironments {
         return {
           'BASE_URL': 'https://lms-giwum.ondigitalocean.app',
           'WEBSOCKET_URL':
-              'wss://sound-level.vision-jo.com/ws/sensor-data/',
+              'wss://lms-giwum.ondigitalocean.app/ws/chat/',
           // 'firebase_options':
           //     firebase_specialty.DefaultFirebaseOptions.currentPlatform,
           // 'firebase_name': 'sound-level-28c39',

@@ -106,6 +106,10 @@ class ChatInboxScreen extends StatelessWidget {
                                   item['peer_name']?.toString().trim();
                               final nodeTitle =
                                   item['node_title']?.toString() ?? '';
+                              final peerImage = controller.getPeerImageForSession(
+                                sessionId,
+                                fallback: item,
+                              );
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: Container(
@@ -125,13 +129,7 @@ class ChatInboxScreen extends StatelessWidget {
                                   child: Row(
                                     textDirection: TextDirection.rtl,
                                     children: [
-                                      const CircleAvatar(
-                                        backgroundColor: Color(0xFFE5E7EB),
-                                        child: Icon(
-                                          Icons.support_agent_rounded,
-                                          color: Color(0xFF6B7280),
-                                        ),
-                                      ),
+                                      _SessionAvatar(imageUrl: peerImage),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
@@ -170,6 +168,7 @@ class ChatInboxScreen extends StatelessWidget {
                                             : () => controller.openSession(
                                                   sessionId,
                                                   peerName: peerName,
+                                                  peerImage: peerImage?.isNotEmpty == true ? peerImage : null,
                                                 ),
                                         child: const Text('فتح'),
                                       ),
@@ -200,6 +199,10 @@ class ChatInboxScreen extends StatelessWidget {
                                       ? item['peer_name']!
                                       : 'محادثة';
                               final nodeTitle = item['node_title'] ?? '';
+                              final peerImage = controller.getPeerImageForSession(
+                                sessionId,
+                                fallback: item,
+                              );
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: Container(
@@ -219,13 +222,7 @@ class ChatInboxScreen extends StatelessWidget {
                                   child: Row(
                                     textDirection: TextDirection.rtl,
                                     children: [
-                                      const CircleAvatar(
-                                        backgroundColor: Color(0xFFE5E7EB),
-                                        child: Icon(
-                                          Icons.person,
-                                          color: Color(0xFF6B7280),
-                                        ),
-                                      ),
+                                      _SessionAvatar(imageUrl: peerImage),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
@@ -262,6 +259,7 @@ class ChatInboxScreen extends StatelessWidget {
                                             : () => controller.openSession(
                                                   sessionId,
                                                   peerName: peerName,
+                                                  peerImage: peerImage?.isNotEmpty == true ? peerImage : null,
                                                 ),
                                         child: const Text('فتح'),
                                       ),
@@ -288,6 +286,10 @@ class ChatInboxScreen extends StatelessWidget {
                               final sessionId =
                                   item['session_id']?.toString() ?? '';
                               final student = item['student'];
+                              final peerImage = controller.getPeerImageForSession(
+                                sessionId,
+                                fallback: item,
+                              );
                               final studentName = student is Map
                                   ? (student['full_name']?.toString() ?? 'طالب')
                                   : 'طالب';
@@ -312,13 +314,7 @@ class ChatInboxScreen extends StatelessWidget {
                                   child: Row(
                                     textDirection: TextDirection.rtl,
                                     children: [
-                                      const CircleAvatar(
-                                        backgroundColor: Color(0xFFE5E7EB),
-                                        child: Icon(
-                                          Icons.person,
-                                          color: Color(0xFF6B7280),
-                                        ),
-                                      ),
+                                      _SessionAvatar(imageUrl: peerImage),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
@@ -359,6 +355,7 @@ class ChatInboxScreen extends StatelessWidget {
                                                 controller.openSession(
                                                   sessionId,
                                                   peerName: studentName,
+                                                  peerImage: peerImage?.isNotEmpty == true ? peerImage : null,
                                                 );
                                               },
                                         child: const Text('قبول'),
@@ -483,3 +480,34 @@ class _WsDebugCard extends StatelessWidget {
   }
 }
 
+class _SessionAvatar extends StatelessWidget {
+  final String? imageUrl;
+
+  const _SessionAvatar({this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final url = hasImage ? imageUrl!.trim() : null;
+    const placeholder = CircleAvatar(
+      backgroundColor: Color(0xFFE5E7EB),
+      child: Icon(Icons.person_rounded, color: Color(0xFF6B7280)),
+    );
+    if (url == null) return placeholder;
+    return ClipOval(
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Image.network(
+          url,
+          width: 44,
+          height: 44,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => placeholder,
+          loadingBuilder: (_, child, loadingProgress) =>
+              loadingProgress == null ? child : placeholder,
+        ),
+      ),
+    );
+  }
+}

@@ -5,6 +5,7 @@ import 'package:lms_app/core/domain/routing/app_routes.dart';
 
 import '../cache/local_storage_service.dart';
 import '../cache/secure_storage_service.dart';
+import '../data/data_sources/local_storage_keys.dart';
 import '../presentation/localization/localization_keys.dart';
 
 /// Service responsible for managing user sessions
@@ -37,7 +38,9 @@ class SessionManagerService {
 
       // Clear all stored tokens
       await _secureStorage.clearAllTokens();
-      await _localStorage.clear();
+      // Preserve accepted chats (ASSIGNED_CHAT_SESSIONS) and other
+      // non-auth preferences by clearing only user data.
+      await _localStorage.remove(LocalStorageKeys.user);
 
       // Show session expired message to user
       await _showSessionExpiredMessage(reason);
@@ -98,7 +101,9 @@ class SessionManagerService {
 
       // Clear all stored tokens
       await _secureStorage.clearAllTokens();
-      await _localStorage.clear();
+      // Preserve accepted chats (ASSIGNED_CHAT_SESSIONS) and other
+      // non-auth preferences by clearing only user data.
+      await _localStorage.remove(LocalStorageKeys.user);
 
       // Show logout message if requested
       if (showMessage) {
@@ -147,7 +152,9 @@ class SessionManagerService {
   Future<void> clearUserData() async {
     try {
       await _secureStorage.clearAllTokens();
-      await _localStorage.clear();
+      // Preserve accepted chats (ASSIGNED_CHAT_SESSIONS) and other
+      // non-auth preferences by clearing only user data.
+      await _localStorage.remove(LocalStorageKeys.user);
       log('SessionManager: User data cleared successfully');
     } catch (e) {
       log('SessionManager: Error clearing user data: $e');

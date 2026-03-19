@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for the app to make network requests (release APK uses this manifest). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="lms_app"
         android:name="${applicationName}"

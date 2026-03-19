@@ -79,11 +79,14 @@ class _ChatsList extends StatelessWidget {
     return Obx(() {
       final assigned = controller.assignedSessions;
       final requests = controller.incomingRequests;
+      final callCenterSessionsVersion = controller.callCenterSessionsUpdated.value;
+      final sessionDataVersion = controller.assignedSessionsUpdated.value;
       final totalCount = assigned.length + requests.length;
       if (totalCount == 0) {
         return _buildEmptyState();
       }
       return ListView.separated(
+        key: ValueKey('$sessionDataVersion-$callCenterSessionsVersion'),
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 24),
         itemCount: totalCount,
@@ -93,14 +96,14 @@ class _ChatsList extends StatelessWidget {
           // Always show pending/incoming requests at the top.
           if (index < requests.length) {
             final request = requests[index];
-            final item = _requestToChatItem(request);
+            final item = _requestToChatItem(controller, request);
             return _ChatTile(
               item: item,
               onTap: () => _onChatTap(controller, request),
             );
           }
           final session = assigned[index - requests.length];
-          final item = _assignedToChatItem(session);
+          final item = _assignedToChatItem(controller, session);
           return _ChatTile(
             item: item,
             onTap: () => _onAssignedTap(controller, session),
@@ -110,13 +113,27 @@ class _ChatsList extends StatelessWidget {
     });
   }
 
-  _ChatItem _assignedToChatItem(Map<String, String> session) {
-    final name = session['peer_name']?.isNotEmpty == true
-        ? session['peer_name']!
-        : 'محادثة';
-    final message = session['node_title']?.isNotEmpty == true
-        ? session['node_title']!
-        : 'محادثة نشطة';
+  _ChatItem _assignedToChatItem(
+    ChatController controller,
+    Map<String, String> session,
+  ) {
+    final sessionId = (session['session_id'] ?? '').trim();
+    // Prefer data from callCenterSessions (GET /api/v1/chat/call-center/sessions) so we get student.image.
+    final fromApi = controller.getCallCenterSessionById(sessionId);
+    final name = fromApi != null
+        ? (fromApi['peer_name']?.toString().trim().isNotEmpty == true
+            ? fromApi['peer_name']!.toString().trim()
+            : 'محادثة')
+        : (session['peer_name']?.isNotEmpty == true ? session['peer_name']! : 'محادثة');
+    final message = fromApi != null
+        ? (fromApi['node_title']?.toString().trim().isNotEmpty == true
+            ? fromApi['node_title']!.toString().trim()
+            : 'محادثة نشطة')
+        : (session['node_title']?.isNotEmpty == true ? session['node_title']! : 'محادثة نشطة');
+    final imageUrl = controller.getPeerImageForSession(
+      sessionId,
+      fallback: session,
+    );
     return _ChatItem(
       name: name,
       message: message,
@@ -127,14 +144,23 @@ class _ChatsList extends StatelessWidget {
       statusChip: null,
       statusColor: null,
       hasDoubleCheck: false,
+      imageUrl: imageUrl?.isNotEmpty == true ? imageUrl : null,
     );
   }
 
-  _ChatItem _requestToChatItem(Map<String, dynamic> request) {
+  _ChatItem _requestToChatItem(
+    ChatController controller,
+    Map<String, dynamic> request,
+  ) {
+    final sessionId = (request['session_id']?.toString() ?? '').trim();
     final student = request['student'];
     final studentName = student is Map
         ? (student['full_name']?.toString() ?? 'طالب')
         : 'طالب';
+    final imageUrl = controller.getPeerImageForSession(
+      sessionId,
+      fallback: request,
+    );
     final nodeTitle =
         request['node_title']?.toString() ?? 'طلب محادثة جديدة';
     return _ChatItem(
@@ -147,6 +173,7 @@ class _ChatsList extends StatelessWidget {
       statusChip: 'قبول',
       statusColor: ColorManager().primary,
       hasDoubleCheck: false,
+      imageUrl: imageUrl?.trim().isNotEmpty == true ? imageUrl!.trim() : null,
     );
   }
 
@@ -154,10 +181,21 @@ class _ChatsList extends StatelessWidget {
     ChatController controller,
     Map<String, String> session,
   ) {
-    final sessionId = session['session_id'] ?? '';
+    final sessionId = (session['session_id'] ?? '').trim();
     if (sessionId.isEmpty) return;
-    final peerName = session['peer_name'];
-    controller.openSession(sessionId, peerName: peerName);
+    final fromApi = controller.getCallCenterSessionById(sessionId);
+    final peerName = fromApi != null
+        ? (fromApi['peer_name']?.toString().trim())
+        : session['peer_name'];
+    final peerImage = controller.getPeerImageForSession(
+      sessionId,
+      fallback: session,
+    );
+    controller.openSession(
+      sessionId,
+      peerName: peerName?.isNotEmpty == true ? peerName : null,
+      peerImage: peerImage?.isNotEmpty == true ? peerImage : null,
+    );
   }
 
   Future<void> _onChatTap(
@@ -170,8 +208,16 @@ class _ChatsList extends StatelessWidget {
     final peerName = student is Map
         ? (student['full_name']?.toString() ?? '')
         : null;
+    final peerImage = controller.getPeerImageForSession(
+      sessionId,
+      fallback: request,
+    );
     await controller.acceptChat(sessionId: sessionId);
-    controller.openSession(sessionId, peerName: peerName);
+    controller.openSession(
+      sessionId,
+      peerName: peerName,
+      peerImage: peerImage?.trim().isNotEmpty == true ? peerImage!.trim() : null,
+    );
   }
 }
 
@@ -401,6 +447,7 @@ class _ChatItem {
   final String? statusChip;
   final Color? statusColor;
   final bool hasDoubleCheck;
+  final String? imageUrl;
 
   const _ChatItem({
     required this.name,
@@ -412,6 +459,7 @@ class _ChatItem {
     this.statusChip,
     this.statusColor,
     this.hasDoubleCheck = false,
+    this.imageUrl,
   });
 }
 
@@ -444,7 +492,7 @@ class _ChatTile extends StatelessWidget {
       child: Row(
         textDirection: TextDirection.rtl,
         children: [
-          _Avatar(isOnline: item.isOnline),
+          _Avatar(isOnline: item.isOnline, imageUrl: item.imageUrl),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -543,22 +591,44 @@ class _ChatTile extends StatelessWidget {
 
 class _Avatar extends StatelessWidget {
   final bool isOnline;
-  const _Avatar({required this.isOnline});
+  final String? imageUrl;
+  const _Avatar({required this.isOnline, this.imageUrl});
 
   @override
   Widget build(BuildContext context) {
     final colors = ColorManager();
+    final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final url = hasImage ? imageUrl!.trim() : null;
+    final placeholder = Container(
+      width: 44,
+      height: 44,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Color(0xFFE5E7EB),
+      ),
+      child: const Icon(Icons.person, color: Color(0xFF6B7280)),
+    );
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Container(
+        SizedBox(
           width: 44,
           height: 44,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            color: Color(0xFFE5E7EB),
+          child: ClipOval(
+            child: hasImage && url != null
+                ? Image.network(
+                    url,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => placeholder,
+                    loadingBuilder: (_, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return placeholder;
+                    },
+                  )
+                : placeholder,
           ),
-          child: const Icon(Icons.person, color: Color(0xFF6B7280)),
         ),
         Positioned(
           right: -1,

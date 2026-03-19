@@ -4,13 +4,21 @@ import 'package:lms_app/core/presentation/theme/color_manager.dart';
 import 'package:lms_app/core/presentation/theme/text_manager.dart';
 import 'package:lms_app/features/chat/presentation/controllers/chat_controller.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = ColorManager();
     AppTypography.init();
+    final controllerAvailable = Get.isRegistered<ChatController>();
+    final controller =
+        controllerAvailable ? Get.find<ChatController>() : null;
 
     return Scaffold(
       backgroundColor: colors.scaffoldBackground,
@@ -22,12 +30,24 @@ class HomeScreen extends StatelessWidget {
             child: Column(
               children: [
                 const SizedBox(height: 8),
-                _HomeTopBar(
-                  title: 'سجل المحادثات',
-                  onSearch: () {},
-                ),
+                _HomeTopBar(title: 'سجل المحادثات', onSearch: () {}),
                 const SizedBox(height: 16),
-                const _StatsSection(),
+                controller == null
+                    ? const _StatsSection(
+                        waitingCount: 0,
+                        activeCount: 0,
+                        closedCount: 0,
+                        isLoading: false,
+                      )
+                    : Obx(
+                        () => _StatsSection(
+                          waitingCount: controller.callCenterWaitingCount.value,
+                          activeCount: controller.callCenterActiveCount.value,
+                          closedCount: controller.callCenterClosedCount.value,
+                          isLoading:
+                              controller.isLoadingCallCenterDashboard.value,
+                        ),
+                      ),
                 const SizedBox(height: 14),
                 const _FiltersRow(),
                 const SizedBox(height: 10),
@@ -61,7 +81,9 @@ class _ChatsList extends StatelessWidget {
             child: Text(
               'لا يوجد محادثات',
               style: AppTypography.bodyM.copyWith(
-                color: ColorManager().textDark.withValues(alpha: 0.55),
+                color: ColorManager().textDark.withValues(
+                  alpha: 0.55,
+                ),
               ),
             ),
           ),
@@ -79,22 +101,22 @@ class _ChatsList extends StatelessWidget {
     return Obx(() {
       final fromApi = controller.callCenterSessions;
       final requests = controller.incomingRequests;
-      final callCenterSessionsVersion = controller.callCenterSessionsUpdated.value;
+      final callCenterSessionsVersion =
+          controller.callCenterSessionsUpdated.value;
       final isLoading = controller.isLoadingCallCenterSessions.value;
 
       final apiIds = <String>{};
       for (final s in fromApi) {
-        final id =
-            (s['session_id'] ?? s['id']?.toString() ?? '').toString().trim();
+        final id = (s['session_id'] ?? s['id']?.toString() ?? '')
+            .toString()
+            .trim();
         if (id.isNotEmpty) apiIds.add(id);
       }
       // WebSocket may show a request before GET /call-center/sessions includes it.
-      final pendingOnly = requests
-          .where((r) {
-            final id = r['session_id']?.toString().trim() ?? '';
-            return id.isEmpty || !apiIds.contains(id);
-          })
-          .toList();
+      final pendingOnly = requests.where((r) {
+        final id = r['session_id']?.toString().trim() ?? '';
+        return id.isEmpty || !apiIds.contains(id);
+      }).toList();
 
       final totalCount = pendingOnly.length + fromApi.length;
       if (totalCount == 0) {
@@ -117,7 +139,9 @@ class _ChatsList extends StatelessWidget {
         return _buildEmptyState();
       }
       return ListView.separated(
-        key: ValueKey('$callCenterSessionsVersion-${pendingOnly.length}-${fromApi.length}'),
+        key: ValueKey(
+          '$callCenterSessionsVersion-${pendingOnly.length}-${fromApi.length}',
+        ),
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 24),
         itemCount: totalCount,
@@ -148,18 +172,18 @@ class _ChatsList extends StatelessWidget {
     Map<String, dynamic> session,
   ) {
     final sessionId =
-        (session['session_id'] ?? session['id']?.toString() ?? '').trim();
+        (session['session_id'] ?? session['id']?.toString() ?? '')
+            .trim();
     final peerName = session['peer_name']?.toString().trim();
-    final name =
-        peerName?.isNotEmpty == true ? peerName! : 'محادثة';
+    final name = peerName?.isNotEmpty == true ? peerName! : 'محادثة';
     final nodeTitle = session['node_title']?.toString().trim() ?? '';
-    final message =
-        nodeTitle.isNotEmpty ? nodeTitle : 'محادثة نشطة';
+    final message = nodeTitle.isNotEmpty ? nodeTitle : 'محادثة نشطة';
     final imageUrl = controller.getPeerImageForSession(
       sessionId,
       fallback: session,
     );
-    final status = session['status']?.toString().trim().toLowerCase() ?? '';
+    final status =
+        session['status']?.toString().trim().toLowerCase() ?? '';
     final isClosed = status == 'closed';
     final colors = ColorManager();
     return _ChatItem(
@@ -180,7 +204,8 @@ class _ChatsList extends StatelessWidget {
     ChatController controller,
     Map<String, dynamic> request,
   ) {
-    final sessionId = (request['session_id']?.toString() ?? '').trim();
+    final sessionId = (request['session_id']?.toString() ?? '')
+        .trim();
     final student = request['student'];
     final studentName = student is Map
         ? (student['full_name']?.toString() ?? 'طالب')
@@ -202,7 +227,9 @@ class _ChatsList extends StatelessWidget {
       statusChip: 'قبول',
       statusColor: colors.safe,
       hasDoubleCheck: false,
-      imageUrl: imageUrl?.trim().isNotEmpty == true ? imageUrl!.trim() : null,
+      imageUrl: imageUrl?.trim().isNotEmpty == true
+          ? imageUrl!.trim()
+          : null,
     );
   }
 
@@ -211,8 +238,10 @@ class _ChatsList extends StatelessWidget {
     Map<String, dynamic> session,
   ) {
     final sessionId =
-        (session['session_id'] ?? session['id']?.toString() ?? '').trim();
+        (session['session_id'] ?? session['id']?.toString() ?? '')
+            .trim();
     if (sessionId.isEmpty) return;
+
     final peerName = session['peer_name']?.toString().trim();
     final peerImage = controller.getPeerImageForSession(
       sessionId,
@@ -242,8 +271,12 @@ class _ChatsList extends StatelessWidget {
     // Do not accept here — ChatSessionScreen asks first (نعم/لا).
     controller.openSession(
       sessionId,
-      peerName: peerName?.trim().isNotEmpty == true ? peerName!.trim() : null,
-      peerImage: peerImage?.trim().isNotEmpty == true ? peerImage!.trim() : null,
+      peerName: peerName?.trim().isNotEmpty == true
+          ? peerName!.trim()
+          : null,
+      peerImage: peerImage?.trim().isNotEmpty == true
+          ? peerImage!.trim()
+          : null,
       loadMessages: false,
       requiresAcceptance: true,
     );
@@ -254,10 +287,7 @@ class _HomeTopBar extends StatelessWidget {
   final String title;
   final VoidCallback onSearch;
 
-  const _HomeTopBar({
-    required this.title,
-    required this.onSearch,
-  });
+  const _HomeTopBar({required this.title, required this.onSearch});
 
   @override
   Widget build(BuildContext context) {
@@ -299,31 +329,43 @@ class _HomeTopBar extends StatelessWidget {
 }
 
 class _StatsSection extends StatelessWidget {
-  const _StatsSection();
+  final int waitingCount;
+  final int activeCount;
+  final int closedCount;
+  final bool isLoading;
+
+  const _StatsSection({
+    required this.waitingCount,
+    required this.activeCount,
+    required this.closedCount,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
-      children: const [
+      children: [
         Row(
           children: [
             Expanded(
               child: _StatCard(
-                countText: '20',
+                countText: activeCount.toString(),
                 labelText: 'تم الرد عليه',
                 icon: Icons.chat_bubble_outline,
                 iconBg: Color(0xFFE9FAF4),
                 iconFg: Color(0xFF1FA971),
+                isLoading: isLoading,
               ),
             ),
             SizedBox(width: 12),
             Expanded(
               child: _StatCard(
-                countText: '13',
+                countText: waitingCount.toString(),
                 labelText: 'قيد المتابعة',
                 icon: Icons.assignment_outlined,
                 iconBg: Color(0xFFFFF3E0),
                 iconFg: Color(0xFFF59E0B),
+                isLoading: isLoading,
               ),
             ),
           ],
@@ -334,11 +376,12 @@ class _StatsSection extends StatelessWidget {
           child: SizedBox(
             width: 190,
             child: _StatCard(
-              countText: '20',
+              countText: closedCount.toString(),
               labelText: 'قد تم إغلاقه',
               icon: Icons.chat_bubble_outline,
               iconBg: Color(0xFFFFEBEE),
               iconFg: Color(0xFFEF4444),
+              isLoading: isLoading,
             ),
           ),
         ),
@@ -353,6 +396,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Color iconBg;
   final Color iconFg;
+  final bool isLoading;
 
   const _StatCard({
     required this.countText,
@@ -360,6 +404,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.iconBg,
     required this.iconFg,
+    this.isLoading = false,
   });
 
   @override
@@ -388,13 +433,24 @@ class _StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '$countText طلب',
-                  textAlign: TextAlign.right,
-                  style: AppTypography.bodyM.bold.copyWith(
-                    color: colors.textDark,
+                if (isLoading)
+                  SizedBox(
+                    height: 22,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: iconFg,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    '$countText طلب',
+                    textAlign: TextAlign.right,
+                    style: AppTypography.bodyM.bold.copyWith(
+                      color: colors.textDark,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 4),
                 Text(
                   labelText,
@@ -650,11 +706,13 @@ class _Avatar extends StatelessWidget {
                     width: 44,
                     height: 44,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => placeholder,
-                    loadingBuilder: (_, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return placeholder;
-                    },
+                    errorBuilder: (context, error, stackTrace) =>
+                        placeholder,
+                    loadingBuilder:
+                        (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return placeholder;
+                        },
                   )
                 : placeholder,
           ),

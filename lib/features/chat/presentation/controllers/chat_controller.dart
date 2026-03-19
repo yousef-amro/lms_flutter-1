@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:get/get.dart';
@@ -32,21 +33,31 @@ class ChatController extends GetxController {
 
   final messages = <JsonMap>[].obs;
   final isLoadingMessages = false.obs;
+
   /// Peer profile image URL for the current chat session (from session.student or session.call_center).
   final currentSessionPeerImage = RxnString();
   final incomingRequests = <JsonMap>[].obs;
+
   /// Sessions this agent has accepted (persisted so they survive app restart).
   final assignedSessions = <Map<String, String>>[].obs;
+
   /// All call-center sessions fetched from REST API.
   final callCenterSessions = <JsonMap>[].obs;
   final isLoadingCallCenterSessions = false.obs;
   final callCenterSessionsUpdated = 0.obs;
+
+  final isLoadingCallCenterDashboard = false.obs;
+  final callCenterWaitingCount = 0.obs;
+  final callCenterActiveCount = 0.obs;
+  final callCenterClosedCount = 0.obs;
+
   /// Bump when assignedSessions are updated with API data (e.g. peer_image) so list avatars rebuild.
   final assignedSessionsUpdated = 0.obs;
   final recentEventTypes = <String>[].obs;
 
   /// Avoid duplicates when backend emits both `message_sent` and `new_message`.
-  final LinkedHashSet<String> _seenMessageKeys = LinkedHashSet<String>();
+  final LinkedHashSet<String> _seenMessageKeys =
+      LinkedHashSet<String>();
   final Set<String> _peerImageHydrationInFlight = <String>{};
 
   @override
@@ -54,6 +65,7 @@ class ChatController extends GetxController {
     super.onInit();
     _loadAssignedSessions();
     loadCallCenterSessions();
+    refreshCallCenterDashboard();
     _ws.isConnectedStream.listen((v) => isConnected.value = v);
     _ws.events.listen(_handleEvent);
     connect();
@@ -62,9 +74,45 @@ class ChatController extends GetxController {
   Future<void> refreshHome() async {
     _loadAssignedSessions();
     await loadCallCenterSessions();
+    await refreshCallCenterDashboard();
     if (!isConnected.value) {
       await connect();
     }
+  }
+
+  Future<void> refreshCallCenterDashboard() async {
+    if (isLoadingCallCenterDashboard.value) return;
+
+    isLoadingCallCenterDashboard.value = true;
+    try {
+      final res = await _network.request(
+        NetworkRequest(
+          route: NetworkRouter.callCenterDashboard,
+          requestType: RequestType.get,
+          isAuthorizationRequired: true,
+        ),
+      );
+
+      if (res.status != NetworkResponseStatus.success) return;
+      final raw = res.data;
+      if (raw is! Map) return;
+
+      callCenterWaitingCount.value = _intFromJson(raw['waiting_count']);
+      callCenterActiveCount.value = _intFromJson(raw['active_count']);
+      callCenterClosedCount.value = _intFromJson(raw['closed_count']);
+    } catch (e) {
+      log('ChatController: refreshCallCenterDashboard exception: $e');
+    } finally {
+      isLoadingCallCenterDashboard.value = false;
+    }
+  }
+
+  int _intFromJson(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    final s = v?.toString();
+    if (s == null) return 0;
+    return int.tryParse(s) ?? 0;
   }
 
   void _addMessageDedup(JsonMap msg) {
@@ -83,14 +131,18 @@ class ChatController extends GetxController {
   }
 
   String _messageKey(JsonMap msg) {
-    final directId = msg['id']?.toString() ?? msg['message_id']?.toString();
+    final directId =
+        msg['id']?.toString() ?? msg['message_id']?.toString();
     if (directId != null && directId.trim().isNotEmpty) {
       return 'id:${directId.trim()}';
     }
 
     final sender = msg['sender'];
-    final senderId = (sender is Map) ? sender['id']?.toString() : null;
-    final sessionId = msg['session_id']?.toString() ?? currentSessionId.value;
+    final senderId = (sender is Map)
+        ? sender['id']?.toString()
+        : null;
+    final sessionId =
+        msg['session_id']?.toString() ?? currentSessionId.value;
     final text = (msg['text']?.toString() ?? '').trim();
     final fileUrl = (msg['file_url']?.toString() ?? '').trim();
     final sentAt = msg['sent_at']?.toString() ?? '';
@@ -110,16 +162,21 @@ class ChatController extends GetxController {
     final stored = LocalStorageService().getAssignedChatSessions();
     assignedSessions.assignAll(
       stored
-          .map((session) => {
-                ...session,
-                'peer_image': _normalizeMediaUrl(session['peer_image']) ?? '',
-              })
+          .map(
+            (session) => {
+              ...session,
+              'peer_image':
+                  _normalizeMediaUrl(session['peer_image']) ?? '',
+            },
+          )
           .toList(),
     );
   }
 
   Future<void> _persistAssignedSessions() async {
-    await LocalStorageService().setAssignedChatSessions(assignedSessions.toList());
+    await LocalStorageService().setAssignedChatSessions(
+      assignedSessions.toList(),
+    );
   }
 
   String? _normalizeMediaUrl(String? value) {
@@ -129,8 +186,10 @@ class ChatController extends GetxController {
       return raw;
     }
 
-    final baseUrl =
-        AppEnvironmentHelper().getEnvironmentVariable('BASE_URL')?.toString().trim();
+    final baseUrl = AppEnvironmentHelper()
+        .getEnvironmentVariable('BASE_URL')
+        ?.toString()
+        .trim();
     if (baseUrl == null || baseUrl.isEmpty) {
       return raw;
     }
@@ -154,16 +213,23 @@ class ChatController extends GetxController {
     });
   }
 
-  String? _extractPeerImageFromSessionMap(Map<dynamic, dynamic>? session) {
+  String? _extractPeerImageFromSessionMap(
+    Map<dynamic, dynamic>? session,
+  ) {
     if (session == null) return null;
 
     final student = session['student'];
     if (student is Map) {
-      final studentImage = _normalizeMediaUrl(student['image']?.toString());
-      if (studentImage != null && studentImage.isNotEmpty) return studentImage;
+      final studentImage = _normalizeMediaUrl(
+        student['image']?.toString(),
+      );
+      if (studentImage != null && studentImage.isNotEmpty)
+        return studentImage;
     }
 
-    final directPeerImage = _normalizeMediaUrl(session['peer_image']?.toString());
+    final directPeerImage = _normalizeMediaUrl(
+      session['peer_image']?.toString(),
+    );
     if (directPeerImage != null && directPeerImage.isNotEmpty) {
       return directPeerImage;
     }
@@ -172,14 +238,18 @@ class ChatController extends GetxController {
     if (lastMessage is Map) {
       final receiver = lastMessage['receiver'];
       if (receiver is Map) {
-        final receiverImage = _normalizeMediaUrl(receiver['image']?.toString());
+        final receiverImage = _normalizeMediaUrl(
+          receiver['image']?.toString(),
+        );
         if (receiverImage != null && receiverImage.isNotEmpty) {
           return receiverImage;
         }
       }
       final sender = lastMessage['sender'];
       if (sender is Map) {
-        final senderImage = _normalizeMediaUrl(sender['image']?.toString());
+        final senderImage = _normalizeMediaUrl(
+          sender['image']?.toString(),
+        );
         if (senderImage != null && senderImage.isNotEmpty) {
           return senderImage;
         }
@@ -188,8 +258,9 @@ class ChatController extends GetxController {
 
     final callCenter = session['call_center'];
     if (callCenter is Map) {
-      final callCenterImage =
-          _normalizeMediaUrl(callCenter['image']?.toString());
+      final callCenterImage = _normalizeMediaUrl(
+        callCenter['image']?.toString(),
+      );
       if (callCenterImage != null && callCenterImage.isNotEmpty) {
         return callCenterImage;
       }
@@ -207,7 +278,8 @@ class ChatController extends GetxController {
     if (apiImage != null && apiImage.isNotEmpty) return apiImage;
 
     final fallbackImage = _extractPeerImageFromSessionMap(fallback);
-    if (fallbackImage != null && fallbackImage.isNotEmpty) return fallbackImage;
+    if (fallbackImage != null && fallbackImage.isNotEmpty)
+      return fallbackImage;
 
     return null;
   }
@@ -248,15 +320,18 @@ class ChatController extends GetxController {
         final normalized = <JsonMap>[];
         for (final item in list.whereType<Map>()) {
           final m = Map<String, dynamic>.from(item);
-          final sessionId = m['id']?.toString() ?? m['session_id']?.toString();
+          final sessionId =
+              m['id']?.toString() ?? m['session_id']?.toString();
           final student = m['student'];
           final peerName = student is Map
               ? (student['full_name']?.toString() ?? '')
               : (m['peer_name']?.toString() ?? '');
           final lastMessage = m['last_message'];
-          final nodeTitleFromLast =
-              lastMessage is Map ? (lastMessage['text']?.toString() ?? '') : '';
-          final peerImage = _normalizeMediaUrl(
+          final nodeTitleFromLast = lastMessage is Map
+              ? (lastMessage['text']?.toString() ?? '')
+              : '';
+          final peerImage =
+              _normalizeMediaUrl(
                 student is Map ? student['image']?.toString() : null,
               ) ??
               '';
@@ -265,14 +340,17 @@ class ChatController extends GetxController {
             // Keep compatibility with existing UI code that expects these keys.
             'session_id': sessionId ?? '',
             'peer_name': peerName,
-            'node_title': (m['node_title']?.toString() ?? nodeTitleFromLast),
+            'node_title':
+                (m['node_title']?.toString() ?? nodeTitleFromLast),
             'peer_image': peerImage,
             if (student is Map)
               'student': {
                 ...Map<String, dynamic>.from(student),
                 'image': peerImage.isNotEmpty
                     ? peerImage
-                    : _normalizeMediaUrl(student['image']?.toString()),
+                    : _normalizeMediaUrl(
+                        student['image']?.toString(),
+                      ),
               },
           });
         }
@@ -319,10 +397,7 @@ class ChatController extends GetxController {
         continue;
       }
       assignedChanged = true;
-      updatedAssigned.add({
-        ...s,
-        'peer_image': img,
-      });
+      updatedAssigned.add({...s, 'peer_image': img});
     }
 
     if (assignedChanged) {
@@ -333,7 +408,9 @@ class ChatController extends GetxController {
 
     // Update callCenterSessions list item if present (so HomeScreen can pick it up).
     final idx = callCenterSessions.indexWhere((s) {
-      final sid = (s['session_id'] ?? s['id']?.toString() ?? '').toString().trim();
+      final sid = (s['session_id'] ?? s['id']?.toString() ?? '')
+          .toString()
+          .trim();
       return sid == id;
     });
     if (idx >= 0) {
@@ -396,7 +473,8 @@ class ChatController extends GetxController {
     final studentImage = _normalizeMediaUrl(
       student is Map ? student['image']?.toString() : null,
     );
-    if (studentImage != null && studentImage.isNotEmpty) return studentImage;
+    if (studentImage != null && studentImage.isNotEmpty)
+      return studentImage;
     final callCenterImage = _normalizeMediaUrl(
       callCenter is Map ? callCenter['image']?.toString() : null,
     );
@@ -427,7 +505,9 @@ class ChatController extends GetxController {
       if (img == null || img.isEmpty) return;
       _applyPeerImageUpdate(sessionId: id, peerImage: img);
     } catch (e) {
-      log('ChatController: hydratePeerImageForSession($id) exception: $e');
+      log(
+        'ChatController: hydratePeerImageForSession($id) exception: $e',
+      );
     } finally {
       _peerImageHydrationInFlight.remove(id);
     }
@@ -438,7 +518,8 @@ class ChatController extends GetxController {
     for (final s in apiSessions) {
       if (s is! Map) continue;
       final id = (s['id'] ?? s['session_id'])?.toString().trim();
-      if (id != null && id.isNotEmpty) byId[id] = Map<String, dynamic>.from(s);
+      if (id != null && id.isNotEmpty)
+        byId[id] = Map<String, dynamic>.from(s);
     }
     if (byId.isEmpty) return;
     final updated = <Map<String, String>>[];
@@ -470,9 +551,15 @@ class ChatController extends GetxController {
           : (api['node_title']?.toString() ?? '').trim();
       updated.add({
         'session_id': sessionId,
-        'peer_name': peerName.isNotEmpty ? peerName : (assigned['peer_name'] ?? ''),
-        'node_title': nodeTitle.isNotEmpty ? nodeTitle : (assigned['node_title'] ?? ''),
-        'peer_image': peerImage.isNotEmpty ? peerImage : (assigned['peer_image'] ?? ''),
+        'peer_name': peerName.isNotEmpty
+            ? peerName
+            : (assigned['peer_name'] ?? ''),
+        'node_title': nodeTitle.isNotEmpty
+            ? nodeTitle
+            : (assigned['node_title'] ?? ''),
+        'peer_image': peerImage.isNotEmpty
+            ? peerImage
+            : (assigned['peer_image'] ?? ''),
       });
     }
     if (updated.isNotEmpty) {
@@ -494,7 +581,8 @@ class ChatController extends GetxController {
   /// Otherwise `home_screen.dart` keeps showing the old `node_title` until API refresh or open chat.
   void _updateChatListPreviewFromMessage(JsonMap msg) {
     final rawSessionId = msg['session_id']?.toString();
-    final sessionId = (rawSessionId ?? currentSessionId.value)?.trim();
+    final sessionId = (rawSessionId ?? currentSessionId.value)
+        ?.trim();
     if (sessionId == null || sessionId.isEmpty) return;
 
     final preview = _previewTextFromMessage(msg);
@@ -515,7 +603,9 @@ class ChatController extends GetxController {
     // Update callCenterSessions so home_screen can show `fromApi['node_title']`.
     for (var i = 0; i < callCenterSessions.length; i++) {
       final s = callCenterSessions[i];
-      final id = (s['session_id'] ?? s['id']?.toString()).toString().trim();
+      final id = (s['session_id'] ?? s['id']?.toString())
+          .toString()
+          .trim();
       if (id == sessionId) {
         final updated = Map<String, dynamic>.from(s);
         updated['node_title'] = preview;
@@ -549,18 +639,27 @@ class ChatController extends GetxController {
 
   Future<void> acceptChat({required String sessionId}) async {
     await _ws.sendAction('accept_chat', {'session_id': sessionId});
+    // Best-effort: counts usually change immediately after accepting.
+    unawaited(refreshCallCenterDashboard());
   }
 
-  Future<void> sendText({required String sessionId, required String text}) async {
-    await _ws.sendAction('send_message', {'session_id': sessionId, 'text': text});
+  Future<void> sendText({
+    required String sessionId,
+    required String text,
+  }) async {
+    await _ws.sendAction('send_message', {
+      'session_id': sessionId,
+      'text': text,
+    });
   }
 
   void _markCallCenterSessionClosed(String sessionId) {
     final id = sessionId.trim();
     if (id.isEmpty) return;
     final idx = callCenterSessions.indexWhere((s) {
-      final sid =
-          (s['session_id'] ?? s['id']?.toString() ?? '').toString().trim();
+      final sid = (s['session_id'] ?? s['id']?.toString() ?? '')
+          .toString()
+          .trim();
       return sid == id;
     });
     if (idx < 0) return;
@@ -570,7 +669,10 @@ class ChatController extends GetxController {
     callCenterSessionsUpdated.value++;
   }
 
-  Future<void> closeChat({required String sessionId, String? closeReasonId}) async {
+  Future<void> closeChat({
+    required String sessionId,
+    String? closeReasonId,
+  }) async {
     final payload = <String, dynamic>{'session_id': sessionId};
     if (closeReasonId != null) {
       payload['close_reason_id'] = closeReasonId;
@@ -584,6 +686,7 @@ class ChatController extends GetxController {
     );
     assignedSessions.removeWhere((s) => s['session_id'] == sessionId);
     _persistAssignedSessions();
+    unawaited(refreshCallCenterDashboard());
   }
 
   Future<List<JsonMap>> fetchCloseReasons({
@@ -636,7 +739,9 @@ class ChatController extends GetxController {
     }
 
     final message =
-        second.failure?.message ?? first.failure?.message ?? 'Failed request';
+        second.failure?.message ??
+        first.failure?.message ??
+        'Failed request';
     log('ChatController: fetchCloseReasons failed: $message');
     throw Exception(message);
   }
@@ -651,7 +756,9 @@ class ChatController extends GetxController {
     });
   }
 
-  Future<void> loadSessionMessages({required String sessionId}) async {
+  Future<void> loadSessionMessages({
+    required String sessionId,
+  }) async {
     if (sessionId.trim().isEmpty) return;
     if (isLoadingMessages.value) return;
     isLoadingMessages.value = true;
@@ -739,17 +846,29 @@ class ChatController extends GetxController {
             final student = session['student'];
             final callCenter = session['call_center'];
             if (student is Map && student['image'] != null) {
-              final img = _normalizeMediaUrl(student['image']?.toString()) ?? '';
-              currentSessionPeerImage.value = img;
-              if (img.isNotEmpty) {
-                _applyPeerImageUpdate(sessionId: sessionId, peerImage: img);
-              }
-            } else if (callCenter is Map && callCenter['image'] != null) {
               final img =
-                  _normalizeMediaUrl(callCenter['image']?.toString()) ?? '';
+                  _normalizeMediaUrl(student['image']?.toString()) ??
+                  '';
               currentSessionPeerImage.value = img;
               if (img.isNotEmpty) {
-                _applyPeerImageUpdate(sessionId: sessionId, peerImage: img);
+                _applyPeerImageUpdate(
+                  sessionId: sessionId,
+                  peerImage: img,
+                );
+              }
+            } else if (callCenter is Map &&
+                callCenter['image'] != null) {
+              final img =
+                  _normalizeMediaUrl(
+                    callCenter['image']?.toString(),
+                  ) ??
+                  '';
+              currentSessionPeerImage.value = img;
+              if (img.isNotEmpty) {
+                _applyPeerImageUpdate(
+                  sessionId: sessionId,
+                  peerImage: img,
+                );
               }
             }
           }
@@ -762,7 +881,9 @@ class ChatController extends GetxController {
         }
       } else {
         log('ChatController: loadSessionMessages failed.');
-        log('ChatController: status=failure message=${res.failure?.message}');
+        log(
+          'ChatController: status=failure message=${res.failure?.message}',
+        );
         if (res.data != null) {
           log('ChatController: failure data=${res.data}');
         }
@@ -796,7 +917,8 @@ class ChatController extends GetxController {
         final current = event['current_session'];
         if (current is Map) {
           currentSessionId.value = current['session_id']?.toString();
-          allowAttachments.value = current['allow_attachments'] == true;
+          allowAttachments.value =
+              current['allow_attachments'] == true;
         }
         break;
 
@@ -806,7 +928,9 @@ class ChatController extends GetxController {
         final student = normalizedEvent['student'];
         if (student is Map) {
           final studentMap = Map<String, dynamic>.from(student);
-          studentMap['image'] = _normalizeMediaUrl(studentMap['image']?.toString());
+          studentMap['image'] = _normalizeMediaUrl(
+            studentMap['image']?.toString(),
+          );
           normalizedEvent['student'] = studentMap;
         }
         incomingRequests.insert(0, normalizedEvent);
@@ -817,13 +941,15 @@ class ChatController extends GetxController {
           // Best-effort: some backends only include the avatar inside the messages payload.
           hydratePeerImageForSession(sid);
         }
+        unawaited(refreshCallCenterDashboard());
         break;
 
       case 'chat_request_created':
         currentSessionId.value = event['session_id']?.toString();
         final session = event['session'];
         if (session is Map) {
-          allowAttachments.value = session['allow_attachments'] == true;
+          allowAttachments.value =
+              session['allow_attachments'] == true;
         }
         break;
 
@@ -836,7 +962,8 @@ class ChatController extends GetxController {
         currentSessionId.value = sessionId;
         final session = event['session'];
         if (session is Map) {
-          allowAttachments.value = session['allow_attachments'] == true;
+          allowAttachments.value =
+              session['allow_attachments'] == true;
         }
         // Persist this accepted session so it survives app restart
         if (sessionId != null && sessionId.isNotEmpty) {
@@ -858,8 +985,11 @@ class ChatController extends GetxController {
                 ? (student['full_name']?.toString() ?? '')
                 : '';
             nodeTitle = request['node_title']?.toString() ?? '';
-            peerImage = _normalizeMediaUrl(
-                  student is Map ? student['image']?.toString() : null,
+            peerImage =
+                _normalizeMediaUrl(
+                  student is Map
+                      ? student['image']?.toString()
+                      : null,
                 ) ??
                 '';
             incomingRequests.removeWhere(
@@ -867,10 +997,14 @@ class ChatController extends GetxController {
             );
           }
           if (studentMap is Map) {
-            if (peerName.isEmpty) peerName = studentMap['full_name']?.toString() ?? '';
+            if (peerName.isEmpty)
+              peerName = studentMap['full_name']?.toString() ?? '';
             if (peerImage.isEmpty) {
               peerImage =
-                  _normalizeMediaUrl(studentMap['image']?.toString()) ?? '';
+                  _normalizeMediaUrl(
+                    studentMap['image']?.toString(),
+                  ) ??
+                  '';
             }
             final lastMsg = sessionMap?['last_message'];
             if (nodeTitle.isEmpty && lastMsg is Map) {
@@ -896,6 +1030,7 @@ class ChatController extends GetxController {
             hydratePeerImageForSession(sessionId);
           }
         }
+        unawaited(refreshCallCenterDashboard());
         break;
 
       case 'message_sent':
@@ -926,10 +1061,19 @@ class ChatController extends GetxController {
           );
           _persistAssignedSessions();
         }
+        unawaited(refreshCallCenterDashboard());
         break;
 
       case 'error':
         final message = event['message']?.toString() ?? 'error';
+        final lower = message.toLowerCase();
+        // Avoid noisy "failed" snackbars when the backend already closed the chat.
+        if (lower.contains('already_closed') ||
+            lower.contains('already closed') ||
+            lower.contains('chat_closed') ||
+            lower == 'already_closed') {
+          return;
+        }
         Get.snackbar('WS', message, snackPosition: SnackPosition.TOP);
         break;
     }
@@ -965,7 +1109,8 @@ class ChatController extends GetxController {
       '/chat/session',
       arguments: {
         'session_id': sessionId,
-        if (peerName != null && peerName.isNotEmpty) 'peer_name': peerName,
+        if (peerName != null && peerName.isNotEmpty)
+          'peer_name': peerName,
         if (_normalizeMediaUrl(peerImage) != null)
           'peer_image': _normalizeMediaUrl(peerImage),
         if (requiresAcceptance) 'requires_acceptance': true,
@@ -975,4 +1120,3 @@ class ChatController extends GetxController {
 
   // Keep socket alive globally; don't disconnect here.
 }
-

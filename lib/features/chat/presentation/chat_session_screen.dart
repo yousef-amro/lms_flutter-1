@@ -20,6 +20,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
   bool _promptShown = false;
   bool _requiresAcceptance = false;
   bool _isAccepted = true;
+  bool _isChatClosed = false;
   String _sessionId = '';
 
   static const String _noCloseReasonSentinel = '__NO_CLOSE_REASON__';
@@ -49,10 +50,47 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
     // If it doesn't require acceptance, enable the chat right away.
     _isAccepted = !_requiresAcceptance;
 
+    // Safety-net: if the session is already closed, disable sending/closing UI.
+    if (_sessionId.isNotEmpty) {
+      final session = controller.getCallCenterSessionById(_sessionId);
+      final status =
+          session?['status']?.toString().trim().toLowerCase() ?? '';
+      _isChatClosed = status == 'closed';
+      if (_isChatClosed) {
+        _isAccepted = false;
+      }
+    }
+
     if (!_requiresAcceptance || _sessionId.isEmpty) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _promptShown) return;
+
+      // Ensure we have the latest status before showing the "accept" dialog.
+      // This prevents calling `acceptChat` on sessions that were closed
+      // between the last refresh and this screen opening.
+      await controller.loadCallCenterSessions();
+      if (!mounted) return;
+
+      final session = controller.getCallCenterSessionById(_sessionId);
+      final ccStatus = session?['status']?.toString().trim().toLowerCase();
+      String? reqStatus;
+      for (final r in controller.incomingRequests) {
+        final sid = r['session_id']?.toString().trim();
+        if (sid == _sessionId) {
+          reqStatus = r['status']?.toString().trim().toLowerCase();
+          break;
+        }
+      }
+      _isChatClosed = ccStatus == 'closed' || reqStatus == 'closed';
+      if (_isChatClosed) {
+        setState(() {
+          _isAccepted = false;
+        });
+        await controller.loadSessionMessages(sessionId: _sessionId);
+        return;
+      }
+
       _promptShown = true;
 
       final shouldAccept = await showDialog<bool>(
@@ -86,7 +124,35 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
           setState(() {
             _isAccepted = true;
           });
-        } catch (_) {
+        } catch (e) {
+          // If backend says it's already closed, don't show the failure snackbar.
+          final updatedSession =
+              controller.getCallCenterSessionById(_sessionId);
+          final updatedStatusCallCenter = updatedSession?['status']
+              ?.toString()
+              .trim()
+              .toLowerCase();
+
+          String? updatedStatusIncoming;
+          for (final r in controller.incomingRequests) {
+            final sid = r['session_id']?.toString().trim();
+            if (sid == _sessionId) {
+              updatedStatusIncoming =
+                  r['status']?.toString().trim().toLowerCase();
+              break;
+            }
+          }
+
+          final err = e.toString().toLowerCase();
+          final isClosed =
+              updatedStatusCallCenter == 'closed' ||
+              updatedStatusIncoming == 'closed' ||
+              err.contains('already_closed') ||
+              err.contains('chat_closed') ||
+              err.contains('already closed');
+
+          if (isClosed) return;
+
           Get.snackbar(
             'خطأ',
             'تعذر قبول المحادثة. حاول مرة أخرى.',
@@ -147,7 +213,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                 ),
                 onPressed: () => Get.back(),
               ),
-              if (sessionId.isNotEmpty) ...[
+              if (sessionId.isNotEmpty && !_isChatClosed) ...[
                 IconButton(
                   onPressed: () async {
                     final closeReasonId =
@@ -276,7 +342,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
             Expanded(
               // Pending accept: no Obx here — GetX errors if Obx returns without
               // reading any .obs (e.g. before messages / loading are touched).
-              child: _requiresAcceptance && !_isAccepted
+              child: _requiresAcceptance && !_isAccepted && !_isChatClosed
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),

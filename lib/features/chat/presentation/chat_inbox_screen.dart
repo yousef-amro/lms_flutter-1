@@ -502,8 +502,8 @@ class _SessionAvatar extends StatelessWidget {
           width: 44,
           height: 44,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => placeholder,
-          loadingBuilder: (_, child, loadingProgress) =>
+          errorBuilder: (context, error, stackTrace) => placeholder,
+          loadingBuilder: (context, child, loadingProgress) =>
               loadingProgress == null ? child : placeholder,
         ),
       ),

@@ -2,7 +2,8 @@ import 'dart:collection';
 import 'dart:async';
 import 'dart:developer';
 
-import 'package:get/get.dart';
+import 'package:dio/dio.dart';
+import 'package:get/get.dart' hide MultipartFile;
 
 import '../../../../environments/app_environments.dart';
 import '../../../../core/cache/local_storage_service.dart';
@@ -650,6 +651,75 @@ class ChatController extends GetxController {
     await _ws.sendAction('send_message', {
       'session_id': sessionId,
       'text': text,
+    });
+  }
+
+  Future<String> uploadChatAttachment({
+    required String sessionId,
+    required String filePath,
+    String? fileName,
+  }) async {
+    final normalizedSessionId = sessionId.trim();
+    if (normalizedSessionId.isEmpty) {
+      throw Exception('Missing session_id');
+    }
+
+    final normalizedPath = filePath.trim();
+    if (normalizedPath.isEmpty) {
+      throw Exception('Missing file path');
+    }
+
+    final pickedName = (fileName ?? '').trim();
+    final safeName = pickedName.isNotEmpty
+        ? pickedName
+        : normalizedPath.split(RegExp(r'[\\/]')).last;
+
+    final res = await _network.request(
+      NetworkRequest(
+        route: NetworkRouter.chatUpload,
+        requestType: RequestType.post,
+        isAuthorizationRequired: true,
+        isFormData: true,
+        data: {'session_id': normalizedSessionId},
+        files: [
+          MapEntry(
+            'file',
+            await MultipartFile.fromFile(
+              normalizedPath,
+              filename: safeName.isNotEmpty ? safeName : null,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (res.status != NetworkResponseStatus.success) {
+      final message = res.failure?.message ?? 'Failed to upload file';
+      throw Exception(message);
+    }
+
+    final raw = res.data;
+    if (raw is Map<String, dynamic>) {
+      final id = raw['id']?.toString().trim();
+      if (id != null && id.isNotEmpty) return id;
+
+      final data = raw['data'];
+      if (data is Map<String, dynamic>) {
+        final nestedId = data['id']?.toString().trim();
+        if (nestedId != null && nestedId.isNotEmpty) return nestedId;
+      }
+    }
+
+    throw Exception('Upload succeeded but attachment id is missing');
+  }
+
+  Future<void> sendAttachment({
+    required String sessionId,
+    required String attachmentId,
+  }) async {
+    await _ws.sendAction('send_message', {
+      'session_id': sessionId,
+      'attachment_id': attachmentId,
     });
   }
 

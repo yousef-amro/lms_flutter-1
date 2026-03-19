@@ -29,8 +29,8 @@ Every message from the client must be **JSON** with this shape:
 }
 ```
 
-- **`action`** (string, required): One of the actions listed below.
-- **`payload`** (object, optional): Data for that action. Omit or use `{}` if the action needs no data.
+- `**action**` (string, required): One of the actions listed below.
+- `**payload**` (object, optional): Data for that action. Omit or use `{}` if the action needs no data.
 
 If `action` is missing or not recognized, the server responds with:
 
@@ -47,9 +47,11 @@ If `action` is missing or not recognized, the server responds with:
 **Who:** **Student** only.  
 **Purpose:** Start a new chat session for a specific support node (e.g. "Unit 1", "Technical support").
 
-| Payload key   | Type   | Required | Description                          |
-|---------------|--------|----------|--------------------------------------|
-| `node_id`     | string | ✅       | UUID of the `RealTimeChatNode` to request chat for. |
+
+| Payload key | Type   | Required | Description                                         |
+| ----------- | ------ | -------- | --------------------------------------------------- |
+| `node_id`   | string | ✅        | UUID of the `RealTimeChatNode` to request chat for. |
+
 
 **Example:**
 
@@ -76,9 +78,11 @@ If `action` is missing or not recognized, the server responds with:
 **Who:** **Call center** only.  
 **Purpose:** Assign the current call center user to a waiting chat session and mark it active. The student receives a welcome message and `chat_assigned`.
 
-| Payload key   | Type   | Required | Description                          |
-|---------------|--------|----------|--------------------------------------|
-| `session_id`  | string | ✅       | UUID of the chat session to accept.  |
+
+| Payload key  | Type   | Required | Description                         |
+| ------------ | ------ | -------- | ----------------------------------- |
+| `session_id` | string | ✅        | UUID of the chat session to accept. |
+
 
 **Example:**
 
@@ -104,11 +108,13 @@ If `action` is missing or not recognized, the server responds with:
 **Who:** **Student** or **Call center** (only if they are part of that session).  
 **Purpose:** Send a text message or reference an already-uploaded attachment in the chat.
 
-| Payload key     | Type   | Required | Description                                                                 |
-|-----------------|--------|----------|-----------------------------------------------------------------------------|
-| `session_id`    | string | ✅       | UUID of the active chat session.                                            |
-| `text`          | string | optional | Message text. Use when sending a text message.                              |
+
+| Payload key     | Type   | Required | Description                                                                                                                                                                        |
+| --------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_id`    | string | ✅        | UUID of the active chat session.                                                                                                                                                   |
+| `text`          | string | optional | Message text. Use when sending a text message.                                                                                                                                     |
 | `attachment_id` | string | optional | UUID of a `ChatMessage` created via the [attachment upload API](#attachment-upload). Use to "send" an already-uploaded file/image in the chat. If present, `text` is not required. |
+
 
 - For a **text-only** message: send `session_id` and `text` (can be empty string; will be trimmed).
 - For an **attachment-only** message: send `session_id` and `attachment_id` (the message was already created by upload; this action broadcasts it into the conversation).
@@ -133,7 +139,7 @@ If `action` is missing or not recognized, the server responds with:
   "action": "send_message",
   "payload": {
     "session_id": "660e8400-e29b-41d4-a716-446655440001",
-    "attachment_id": "770e8400-e29b-41d4-a716-446655440002"
+    "attachment_id": "d1cdefe3-04ba-4d01-b8d9-4ac3ea49b21b"
   }
 }
 ```
@@ -153,10 +159,12 @@ If `action` is missing or not recognized, the server responds with:
 **Who:** **Student** (their own session) or **Call center** (sessions they are assigned to).  
 **Purpose:** Close the chat session.
 
-| Payload key       | Type   | Required | Description                                                                 |
-|-------------------|--------|----------|-----------------------------------------------------------------------------|
-| `session_id`      | string | ✅       | UUID of the chat session to close.                                         |
-| `close_reason_id` | string | optional | UUID of a close reason from the [close reasons API](#close-reasons-api).   |
+
+| Payload key       | Type   | Required | Description                                                              |
+| ----------------- | ------ | -------- | ------------------------------------------------------------------------ |
+| `session_id`      | string | ✅        | UUID of the chat session to close.                                       |
+| `close_reason_id` | string | optional | UUID of a close reason from the [close reasons API](#close-reasons-api). |
+
 
 **Example:**
 
@@ -186,10 +194,12 @@ If `action` is missing or not recognized, the server responds with:
 **Who:** **Call center** only (and only for sessions they are assigned to).  
 **Purpose:** Allow or disallow the student to send attachments in this session.
 
-| Payload key  | Type    | Required | Description                                      |
-|--------------|---------|----------|--------------------------------------------------|
-| `session_id` | string  | ✅       | UUID of the active chat session.                 |
+
+| Payload key  | Type    | Required | Description                                                            |
+| ------------ | ------- | -------- | ---------------------------------------------------------------------- |
+| `session_id` | string  | ✅        | UUID of the active chat session.                                       |
 | `allow`      | boolean | optional | `true` to allow attachments, `false` to disallow. Defaults to `false`. |
+
 
 **Example:**
 
@@ -215,27 +225,29 @@ If `action` is missing or not recognized, the server responds with:
 
 ## Events You Receive
 
-All server → client messages are JSON with a **`type`** field. Handle them in your WebSocket `onMessage` handler.
+All server → client messages are JSON with a `**type`** field. Handle them in your WebSocket `onMessage` handler.
 
-| `type`                         | When it is sent | Payload shape (summary) |
-|--------------------------------|-----------------|--------------------------|
-| `connected`                    | Right after connect. | `role`, `user`, and for students optionally `current_session`. |
-| `error`                       | Invalid action or payload. | `message` (e.g. `"forbidden"`, `"missing_node_id"`, `"unknown_action"`), sometimes `detail`. |
-| `chat_request_created`        | Student sent `request_chat` successfully. | `session_id`, `session` (includes `status`, `allow_attachments`, `node_id`). |
-| `chat_assigned`               | Call center sent `accept_chat` successfully, or broadcast to student when their chat is assigned, or to other call center agents when someone else took the chat. | `session_id`, and either `call_center` + `welcome_message` (student / accepting agent) or `assigned_to_other: true` (other agents). |
-| `chat_already_assigned`       | Call center sent `accept_chat` but session was already accepted. | No extra fields. |
-| `message_sent`                | Your `send_message` was accepted. | `message` (id, sender, message_type, text, file_url, created_at). |
-| `new_message`                 | A new message was sent in a session you are in (by you or the other party). | `message` (same shape as above). |
-| `chat_closed`                 | A session was closed (by you or the other party). | `session_id`. |
-| `attachment_permission_changed`| Call center changed attachment permission, or you received the broadcast. | `session_id`, `allow`. |
-| `new_chat_request`            | (Call center only.) A student requested a chat on a node you are assigned to. | `session_id`, `student` (id, full_name, generation_id, generation_name, city_id, city_name), `node_id`, `node_title`, `created_at`. |
+
+| `type`                          | When it is sent                                                                                                                                                   | Payload shape (summary)                                                                                                             |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `connected`                     | Right after connect.                                                                                                                                              | `role`, `user`, and for students optionally `current_session`.                                                                      |
+| `error`                         | Invalid action or payload.                                                                                                                                        | `message` (e.g. `"forbidden"`, `"missing_node_id"`, `"unknown_action"`), sometimes `detail`.                                        |
+| `chat_request_created`          | Student sent `request_chat` successfully.                                                                                                                         | `session_id`, `session` (includes `status`, `allow_attachments`, `node_id`).                                                        |
+| `chat_assigned`                 | Call center sent `accept_chat` successfully, or broadcast to student when their chat is assigned, or to other call center agents when someone else took the chat. | `session_id`, and either `call_center` + `welcome_message` (student / accepting agent) or `assigned_to_other: true` (other agents). |
+| `chat_already_assigned`         | Call center sent `accept_chat` but session was already accepted.                                                                                                  | No extra fields.                                                                                                                    |
+| `message_sent`                  | Your `send_message` was accepted.                                                                                                                                 | `message` (id, sender, message_type, text, file_url, created_at).                                                                   |
+| `new_message`                   | A new message was sent in a session you are in (by you or the other party).                                                                                       | `message` (same shape as above).                                                                                                    |
+| `chat_closed`                   | A session was closed (by you or the other party).                                                                                                                 | `session_id`.                                                                                                                       |
+| `attachment_permission_changed` | Call center changed attachment permission, or you received the broadcast.                                                                                         | `session_id`, `allow`.                                                                                                              |
+| `new_chat_request`              | (Call center only.) A student requested a chat on a node you are assigned to.                                                                                     | `session_id`, `student` (id, full_name, generation_id, generation_name, city_id, city_name), `node_id`, `node_title`, `created_at`. |
+
 
 ### Connected payloads
 
 - **Student:**  
-  `role: "student"`, `user: { id, full_name }`, and optionally `current_session: { session_id, status, allow_attachments, call_center }` if they have an open session.
+`role: "student"`, `user: { id, full_name }`, and optionally `current_session: { session_id, status, allow_attachments, call_center }` if they have an open session.
 - **Call center:**  
-  `role: "call_center"`, `user: { id, full_name }`.
+`role: "call_center"`, `user: { id, full_name }`.
 
 ### Message object (in `message_sent` / `new_message`)
 
@@ -266,8 +278,8 @@ Before closing a chat, the frontend can fetch the list of close reasons (for dro
 Attachments are created via REST, then referenced in `send_message` with `attachment_id`:
 
 1. **Upload:** `POST /api/chat/upload` (or your chat base path) with:
-   - `session_id` (form or query)
-   - `file` (multipart file)
+  - `session_id` (form or query)
+  - `file` (multipart file)
 2. **Response:** 201 with the created message object (includes `id`).
 3. **Send in chat:** Send a WebSocket message with `action: "send_message"` and `payload: { session_id, attachment_id: "<id from step 2>" }`.
 
@@ -277,12 +289,14 @@ Students may only upload if the session has `allow_attachments === true` (call c
 
 ## Quick Reference: Actions by Role
 
-| Action                    | Student | Call center |
-|---------------------------|--------|-------------|
-| `request_chat`            | ✅     | ❌          |
-| `accept_chat`             | ❌     | ✅          |
-| `send_message`            | ✅     | ✅          |
-| `close_chat`              | ✅     | ✅          |
-| `set_attachment_permission` | ❌   | ✅          |
+
+| Action                      | Student | Call center |
+| --------------------------- | ------- | ----------- |
+| `request_chat`              | ✅       | ❌           |
+| `accept_chat`               | ❌       | ✅           |
+| `send_message`              | ✅       | ✅           |
+| `close_chat`                | ✅       | ✅           |
+| `set_attachment_permission` | ❌       | ✅           |
+
 
 All IDs (`node_id`, `session_id`, `attachment_id`, `close_reason_id`) are UUIDs sent as strings.

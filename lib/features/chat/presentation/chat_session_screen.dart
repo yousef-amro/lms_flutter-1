@@ -1,8 +1,11 @@
 import 'dart:ui' as ui;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
+import 'package:video_player/video_player.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/presentation/theme/color_manager.dart';
@@ -24,6 +27,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
   bool _requiresAcceptance = false;
   bool _isAccepted = true;
   bool _isChatClosed = false;
+  bool _isUploadingAttachment = false;
   String _sessionId = '';
 
   static const String _noCloseReasonSentinel = '__NO_CLOSE_REASON__';
@@ -224,7 +228,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
           backgroundColor: colors.cardBackground,
           elevation: 0,
           // Place "close chat" next to the back button (like the screenshot).
-          leadingWidth: sessionId.isNotEmpty ? 120 : 56,
+          leadingWidth: sessionId.isNotEmpty ? 188 : 56,
           leading: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -279,6 +283,20 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                     'assets/images/svg/message-tick.svg',
                     width: 24,
                     height: 24,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () async {
+                    if (!mounted) return;
+                    await controller.setAttachmentPermission(
+                      sessionId: sessionId,
+                      allow: true,
+                    );
+                  },
+                  icon: Icon(
+                    Icons.attach_file_rounded,
+                    size: 22,
+                    color: colors.textDark,
                   ),
                 ),
               ],
@@ -455,6 +473,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                           final text = (m['text']?.toString() ?? '')
                               .trim();
                           final fileUrl = m['file_url']?.toString();
+                          final messageType = m['message_type']?.toString();
                           final content = text.isNotEmpty
                               ? text
                               : (fileUrl ?? '');
@@ -473,6 +492,8 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                           listChildren.add(
                             _ChatBubble(
                               text: content,
+                              fileUrl: fileUrl,
+                              messageType: messageType,
                               isFromMe: isFromMe,
                               timestamp: timestamp,
                               senderName: senderName.isNotEmpty
@@ -503,9 +524,9 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                 color: colors.scaffoldBackground,
                 child: _ChatInputBar(
                   textController: _textController,
-                  enabled: _isAccepted,
+                  enabled: _isAccepted && !_isUploadingAttachment,
                   onSend: () {
-                    if (!_isAccepted) return;
+                    if (!_isAccepted || _isUploadingAttachment) return;
                     final text = _textController.text.trim();
                     if (text.isEmpty || sessionId.isEmpty) return;
                     _textController.clear();
@@ -513,6 +534,55 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                       sessionId: sessionId,
                       text: text,
                     );
+                  },
+                  onAttach: () async {
+                    if (_isUploadingAttachment) return;
+                    if (sessionId.isEmpty) return;
+
+                    final picked = await FilePicker.platform.pickFiles(
+                      allowMultiple: false,
+                      withData: false,
+                    );
+                    if (!mounted || picked == null || picked.files.isEmpty) {
+                      return;
+                    }
+
+                    final file = picked.files.first;
+                    final path = file.path?.trim() ?? '';
+                    if (path.isEmpty) {
+                      Get.snackbar(
+                        'خطأ',
+                        'تعذر قراءة الملف المختار.',
+                        snackPosition: SnackPosition.TOP,
+                      );
+                      return;
+                    }
+
+                    setState(() => _isUploadingAttachment = true);
+                    try {
+                      final attachmentId =
+                          await controller.uploadChatAttachment(
+                            sessionId: sessionId,
+                            filePath: path,
+                            fileName: file.name,
+                          );
+
+                      await controller.sendAttachment(
+                        sessionId: sessionId,
+                        attachmentId: attachmentId,
+                      );
+                    } catch (e) {
+                      if (!mounted) return;
+                      Get.snackbar(
+                        'خطأ',
+                        'تعذر إرسال المرفق. حاول مرة أخرى.',
+                        snackPosition: SnackPosition.TOP,
+                      );
+                    } finally {
+                      if (mounted) {
+                        setState(() => _isUploadingAttachment = false);
+                      }
+                    }
                   },
                   colors: colors,
                   sendButtonBg: _sendButtonBg,
@@ -554,6 +624,8 @@ class _DateSeparator extends StatelessWidget {
 class _ChatBubble extends StatelessWidget {
   const _ChatBubble({
     required this.text,
+    this.fileUrl,
+    this.messageType,
     required this.isFromMe,
     required this.timestamp,
     required this.senderName,
@@ -563,12 +635,38 @@ class _ChatBubble extends StatelessWidget {
   });
 
   final String text;
+  final String? fileUrl;
+  final String? messageType;
   final bool isFromMe;
   final DateTime timestamp;
   final String senderName;
   final Color bubbleOutColor;
   final Color bubbleInColor;
   final ColorManager colors;
+
+  static bool _isImageAttachment(String? url, String? type) {
+    if (url == null || url.trim().isEmpty) return false;
+    final t = (type ?? '').toLowerCase();
+    if (t == 'image') return true;
+    final lower = url.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
+  }
+
+  static bool _isVideoAttachment(String? url, String? type) {
+    if (url == null || url.trim().isEmpty) return false;
+    final t = (type ?? '').toLowerCase();
+    if (t == 'video') return true;
+    final lower = url.toLowerCase();
+    return lower.endsWith('.mp4') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.avi') ||
+        lower.endsWith('.mkv');
+  }
 
   static String _formatTime12h(DateTime t) {
     final hour = t.hour > 12
@@ -578,8 +676,146 @@ class _ChatBubble extends StatelessWidget {
     return '${hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} $amPm';
   }
 
+  static String _formatDateArabic(DateTime t) {
+    return DateFormat('d MMMM y', 'ar').format(t.toLocal());
+  }
+
+  static void _showFullScreenImage(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => GestureDetector(
+        onTap: () => Navigator.of(ctx).pop(),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.zero,
+          child: Stack(
+            alignment: Alignment.topRight,
+            children: [
+              InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4,
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.contain,
+                  width: MediaQuery.sizeOf(ctx).width,
+                  height: MediaQuery.sizeOf(ctx).height,
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static void _showFullScreenVideo(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => _VideoPlayerDialog(videoUrl: url),
+    );
+  }
+
+  Widget _buildVideoThumbnail(double maxWidth, VoidCallback onPlay) {
+    const double width = 200;
+    const double height = 180;
+    return GestureDetector(
+      onTap: onPlay,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: width,
+          height: height,
+          color: Colors.black.withValues(alpha: 0.7),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                Icons.play_circle_fill_rounded,
+                size: 64,
+                color: Colors.white.withValues(alpha: 0.9),
+              ),
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.open_in_full_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImageThumbnail(double maxWidth, VoidCallback? onExpand) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          CachedNetworkImage(
+            imageUrl: fileUrl!,
+            fit: BoxFit.cover,
+            width: (maxWidth * 0.78).clamp(160.0, 260.0),
+            height: 180,
+            placeholder: (_, __) => Container(
+              width: 200,
+              height: 180,
+              color: colors.divider.withValues(alpha: 0.5),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+            errorWidget: (_, __, ___) => Container(
+              width: 200,
+              height: 120,
+              color: colors.divider,
+              child: Icon(Icons.broken_image_outlined, color: colors.textMuted),
+            ),
+          ),
+          if (onExpand != null)
+            GestureDetector(
+              onTap: onExpand,
+              child: Container(
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.open_in_full_rounded,
+                  size: 18,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isImage = _isImageAttachment(fileUrl, messageType);
+    final isVideo = _isVideoAttachment(fileUrl, messageType);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final maxBubbleWidth = screenWidth * 0.78;
+
     if (isFromMe) {
       return Align(
         alignment: Alignment.centerRight,
@@ -589,9 +825,7 @@ class _ChatBubble extends StatelessWidget {
             horizontal: 14,
             vertical: 12,
           ),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-          ),
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
           decoration: BoxDecoration(
             color: bubbleInColor,
             borderRadius: BorderRadius.circular(18),
@@ -607,48 +841,86 @@ class _ChatBubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'أنت',
-                style: const TextStyle(
-                  fontFamily: AppFonts.ffShamelFamily,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-                textDirection: ui.TextDirection.rtl,
-              ),
-              const SizedBox(height: 6),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Flexible(
-                    child: Text(
-                      text,
-                      style: const TextStyle(
-                        fontFamily: AppFonts.ffShamelFamily,
-                        fontSize: 15,
-                        color: Colors.white,
-                      ),
-                      textDirection: ui.TextDirection.rtl,
+                  Text(
+                    'أنت',
+                    style: const TextStyle(
+                      fontFamily: AppFonts.ffShamelFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
                     ),
+                    textDirection: ui.TextDirection.rtl,
                   ),
                   const SizedBox(width: 6),
                   Icon(
-                    Icons.check_rounded,
+                    Icons.done_all_rounded,
                     size: 16,
                     color: Colors.white.withValues(alpha: 0.95),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                _formatTime12h(timestamp),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.85),
+              if (isImage)
+                _buildImageThumbnail(
+                  screenWidth,
+                  () => _showFullScreenImage(context, fileUrl!),
+                )
+              else if (isVideo)
+                _buildVideoThumbnail(
+                  screenWidth,
+                  () => _showFullScreenVideo(context, fileUrl!),
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          fontFamily: AppFonts.ffShamelFamily,
+                          fontSize: 15,
+                          color: Colors.white,
+                        ),
+                        textDirection: ui.TextDirection.rtl,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.check_rounded,
+                      size: 16,
+                      color: Colors.white.withValues(alpha: 0.95),
+                    ),
+                  ],
                 ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 textDirection: ui.TextDirection.ltr,
+                children: [
+                  Text(
+                    _formatDateArabic(timestamp),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                    textDirection: ui.TextDirection.rtl,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _formatTime12h(timestamp),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                    textDirection: ui.TextDirection.ltr,
+                  ),
+                ],
               ),
             ],
           ),
@@ -697,22 +969,42 @@ class _ChatBubble extends StatelessWidget {
               ),
               const SizedBox(height: 6),
             ],
-            Text(
-              text,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontFamily: AppFonts.ffShamelFamily,
-                fontSize: 16,
-                color: colors.textDark,
-                height: 1.45,
+            if (isImage)
+              _buildImageThumbnail(
+                screenWidth,
+                () => _showFullScreenImage(context, fileUrl!),
+              )
+            else if (isVideo)
+              _buildVideoThumbnail(
+                screenWidth,
+                () => _showFullScreenVideo(context, fileUrl!),
+              )
+            else
+              Text(
+                text,
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontFamily: AppFonts.ffShamelFamily,
+                  fontSize: 16,
+                  color: colors.textDark,
+                  height: 1.45,
+                ),
+                textDirection: ui.TextDirection.rtl,
               ),
-              textDirection: ui.TextDirection.rtl,
-            ),
             const SizedBox(height: 14),
             Row(
               mainAxisSize: MainAxisSize.min,
               textDirection: ui.TextDirection.ltr,
               children: [
+                Text(
+                  _formatDateArabic(timestamp),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colors.textMuted,
+                  ),
+                  textDirection: ui.TextDirection.rtl,
+                ),
+                const SizedBox(width: 8),
                 Text(
                   _formatTime12h(timestamp),
                   style: TextStyle(
@@ -730,10 +1022,80 @@ class _ChatBubble extends StatelessWidget {
   }
 }
 
+class _VideoPlayerDialog extends StatefulWidget {
+  const _VideoPlayerDialog({required this.videoUrl});
+
+  final String videoUrl;
+
+  @override
+  State<_VideoPlayerDialog> createState() => _VideoPlayerDialogState();
+}
+
+class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          _controller.play();
+          _controller.setLooping(false);
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.of(context).pop(),
+          child: Container(
+            color: Colors.black,
+            width: double.infinity,
+            height: double.infinity,
+            child: _controller.value.isInitialized
+                ? FittedBox(
+                    fit: BoxFit.contain,
+                    child: SizedBox(
+                      width: _controller.value.size.width,
+                      height: _controller.value.size.height,
+                      child: VideoPlayer(_controller),
+                    ),
+                  )
+                : const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+          ),
+        ),
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 8,
+          right: 8,
+          child: IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ChatInputBar extends StatelessWidget {
   const _ChatInputBar({
     required this.textController,
     required this.onSend,
+    required this.onAttach,
     required this.enabled,
     required this.colors,
     required this.sendButtonBg,
@@ -742,6 +1104,7 @@ class _ChatInputBar extends StatelessWidget {
 
   final TextEditingController textController;
   final VoidCallback onSend;
+  final VoidCallback onAttach;
   final bool enabled;
   final ColorManager colors;
   final Color sendButtonBg;
@@ -796,7 +1159,7 @@ class _ChatInputBar extends StatelessWidget {
           ),
 
           IconButton(
-            onPressed: enabled ? () {} : null,
+            onPressed: enabled ? onAttach : null,
             icon: Icon(
               Icons.attach_file_rounded,
               color: colors.textDark,

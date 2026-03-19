@@ -53,6 +53,7 @@ dependencies:
   # Multimedia & Media Handling
   file_picker: ^10.3.10
   flutter_image_compress: ^2.4.0
+  video_player: ^2.9.2
 
   # Localization & Device Info
   flutter_localizations:

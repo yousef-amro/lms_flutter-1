@@ -91,6 +91,7 @@ class NetworkAdapter implements NetworkAdapterAbstraction {
         accessToken,
         request.additionalHeaders,
         isRTL,
+        request.isFormData,
       );
       final url = _urlBuilder(request.route, request.urlIdentifier);
       final data = request.isFormData
@@ -328,6 +329,7 @@ class NetworkAdapter implements NetworkAdapterAbstraction {
     String? accessToken,
     Map<String, String>? additionalHeaders,
     bool isRTL,
+    bool isFormData,
   ) {
     final headers = {
       if (accessToken != null)
@@ -342,7 +344,9 @@ class NetworkAdapter implements NetworkAdapterAbstraction {
     return Options(
       headers: headers,
       validateStatus: (status) => true,
-      contentType: "application/json",
+      contentType: isFormData
+          ? Headers.multipartFormDataContentType
+          : Headers.jsonContentType,
     );
   }
 }

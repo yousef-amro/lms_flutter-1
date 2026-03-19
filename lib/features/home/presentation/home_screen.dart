@@ -77,72 +77,100 @@ class _ChatsList extends StatelessWidget {
     }
     final controller = Get.find<ChatController>();
     return Obx(() {
-      final assigned = controller.assignedSessions;
+      final fromApi = controller.callCenterSessions;
       final requests = controller.incomingRequests;
       final callCenterSessionsVersion = controller.callCenterSessionsUpdated.value;
-      final sessionDataVersion = controller.assignedSessionsUpdated.value;
-      final totalCount = assigned.length + requests.length;
+      final isLoading = controller.isLoadingCallCenterSessions.value;
+
+      final apiIds = <String>{};
+      for (final s in fromApi) {
+        final id =
+            (s['session_id'] ?? s['id']?.toString() ?? '').toString().trim();
+        if (id.isNotEmpty) apiIds.add(id);
+      }
+      // WebSocket may show a request before GET /call-center/sessions includes it.
+      final pendingOnly = requests
+          .where((r) {
+            final id = r['session_id']?.toString().trim() ?? '';
+            return id.isEmpty || !apiIds.contains(id);
+          })
+          .toList();
+
+      final totalCount = pendingOnly.length + fromApi.length;
       if (totalCount == 0) {
+        if (isLoading) {
+          return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 24),
+            children: [
+              SizedBox(
+                height: 240,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: ColorManager().primary,
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
         return _buildEmptyState();
       }
       return ListView.separated(
-        key: ValueKey('$sessionDataVersion-$callCenterSessionsVersion'),
+        key: ValueKey('$callCenterSessionsVersion-${pendingOnly.length}-${fromApi.length}'),
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 24),
         itemCount: totalCount,
         separatorBuilder: (context, index) =>
             const SizedBox(height: 8),
         itemBuilder: (context, index) {
-          // Always show pending/incoming requests at the top.
-          if (index < requests.length) {
-            final request = requests[index];
+          if (index < pendingOnly.length) {
+            final request = pendingOnly[index];
             final item = _requestToChatItem(controller, request);
             return _ChatTile(
               item: item,
               onTap: () => _onChatTap(controller, request),
             );
           }
-          final session = assigned[index - requests.length];
-          final item = _assignedToChatItem(controller, session);
+          final session = fromApi[index - pendingOnly.length];
+          final item = _apiSessionToChatItem(controller, session);
           return _ChatTile(
             item: item,
-            onTap: () => _onAssignedTap(controller, session),
+            onTap: () => _onApiSessionTap(controller, session),
           );
         },
       );
     });
   }
 
-  _ChatItem _assignedToChatItem(
+  _ChatItem _apiSessionToChatItem(
     ChatController controller,
-    Map<String, String> session,
+    Map<String, dynamic> session,
   ) {
-    final sessionId = (session['session_id'] ?? '').trim();
-    // Prefer data from callCenterSessions (GET /api/v1/chat/call-center/sessions) so we get student.image.
-    final fromApi = controller.getCallCenterSessionById(sessionId);
-    final name = fromApi != null
-        ? (fromApi['peer_name']?.toString().trim().isNotEmpty == true
-            ? fromApi['peer_name']!.toString().trim()
-            : 'محادثة')
-        : (session['peer_name']?.isNotEmpty == true ? session['peer_name']! : 'محادثة');
-    final message = fromApi != null
-        ? (fromApi['node_title']?.toString().trim().isNotEmpty == true
-            ? fromApi['node_title']!.toString().trim()
-            : 'محادثة نشطة')
-        : (session['node_title']?.isNotEmpty == true ? session['node_title']! : 'محادثة نشطة');
+    final sessionId =
+        (session['session_id'] ?? session['id']?.toString() ?? '').trim();
+    final peerName = session['peer_name']?.toString().trim();
+    final name =
+        peerName?.isNotEmpty == true ? peerName! : 'محادثة';
+    final nodeTitle = session['node_title']?.toString().trim() ?? '';
+    final message =
+        nodeTitle.isNotEmpty ? nodeTitle : 'محادثة نشطة';
     final imageUrl = controller.getPeerImageForSession(
       sessionId,
       fallback: session,
     );
+    final status = session['status']?.toString().trim().toLowerCase() ?? '';
+    final isClosed = status == 'closed';
+    final colors = ColorManager();
     return _ChatItem(
       name: name,
       message: message,
       timeText: '',
       dateText: '',
-      isOnline: true,
+      isOnline: !isClosed,
       unreadCount: 0,
-      statusChip: null,
-      statusColor: null,
+      statusChip: isClosed ? 'مغلقة' : null,
+      statusColor: isClosed ? colors.error : null,
       hasDoubleCheck: false,
       imageUrl: imageUrl?.isNotEmpty == true ? imageUrl : null,
     );
@@ -163,6 +191,7 @@ class _ChatsList extends StatelessWidget {
     );
     final nodeTitle =
         request['node_title']?.toString() ?? 'طلب محادثة جديدة';
+    final colors = ColorManager();
     return _ChatItem(
       name: studentName,
       message: nodeTitle,
@@ -171,22 +200,20 @@ class _ChatsList extends StatelessWidget {
       isOnline: true,
       unreadCount: 1,
       statusChip: 'قبول',
-      statusColor: ColorManager().primary,
+      statusColor: colors.safe,
       hasDoubleCheck: false,
       imageUrl: imageUrl?.trim().isNotEmpty == true ? imageUrl!.trim() : null,
     );
   }
 
-  void _onAssignedTap(
+  void _onApiSessionTap(
     ChatController controller,
-    Map<String, String> session,
+    Map<String, dynamic> session,
   ) {
-    final sessionId = (session['session_id'] ?? '').trim();
+    final sessionId =
+        (session['session_id'] ?? session['id']?.toString() ?? '').trim();
     if (sessionId.isEmpty) return;
-    final fromApi = controller.getCallCenterSessionById(sessionId);
-    final peerName = fromApi != null
-        ? (fromApi['peer_name']?.toString().trim())
-        : session['peer_name'];
+    final peerName = session['peer_name']?.toString().trim();
     final peerImage = controller.getPeerImageForSession(
       sessionId,
       fallback: session,

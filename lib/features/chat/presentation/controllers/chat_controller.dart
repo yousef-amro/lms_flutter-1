@@ -555,12 +555,29 @@ class ChatController extends GetxController {
     await _ws.sendAction('send_message', {'session_id': sessionId, 'text': text});
   }
 
+  void _markCallCenterSessionClosed(String sessionId) {
+    final id = sessionId.trim();
+    if (id.isEmpty) return;
+    final idx = callCenterSessions.indexWhere((s) {
+      final sid =
+          (s['session_id'] ?? s['id']?.toString() ?? '').toString().trim();
+      return sid == id;
+    });
+    if (idx < 0) return;
+    final m = Map<String, dynamic>.from(callCenterSessions[idx]);
+    m['status'] = 'closed';
+    callCenterSessions[idx] = m;
+    callCenterSessionsUpdated.value++;
+  }
+
   Future<void> closeChat({required String sessionId, String? closeReasonId}) async {
     final payload = <String, dynamic>{'session_id': sessionId};
     if (closeReasonId != null) {
       payload['close_reason_id'] = closeReasonId;
     }
     await _ws.sendAction('close_chat', payload);
+    // Home list reads [callCenterSessions]; keep row and show "closed" without waiting for REST.
+    _markCallCenterSessionClosed(sessionId);
     // Remove from lists immediately so UI updates when user navigates back
     incomingRequests.removeWhere(
       (r) => r['session_id']?.toString() == sessionId,
@@ -900,6 +917,7 @@ class ChatController extends GetxController {
           currentSessionId.value = null;
         }
         if (closedSessionId != null && closedSessionId.isNotEmpty) {
+          _markCallCenterSessionClosed(closedSessionId);
           incomingRequests.removeWhere(
             (r) => r['session_id']?.toString() == closedSessionId,
           );

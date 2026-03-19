@@ -3,46 +3,61 @@ import 'package:lms_app/core/presentation/theme/color_manager.dart';
 import 'package:lms_app/core/presentation/theme/text_manager.dart';
 
 class HomeStatsSection extends StatelessWidget {
-  const HomeStatsSection({super.key});
+  final int waitingCount;
+  final int activeCount;
+  final int closedCount;
+  final bool isLoading;
+
+  const HomeStatsSection({
+    super.key,
+    required this.waitingCount,
+    required this.activeCount,
+    required this.closedCount,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       children: [
         Row(
+          textDirection: TextDirection.rtl,
           children: [
             Expanded(
-              child: StatCard(
-                countText: '20',
+              child: _StatCard(
+                countText: activeCount.toString(),
                 labelText: 'تم الرد عليه',
                 icon: Icons.chat_bubble_outline,
-                iconBg: Color(0xFFE9FAF4),
-                iconFg: Color(0xFF1FA971),
+                iconBg: const Color(0xFFE9FAF4),
+                iconFg: const Color(0xFF1FA971),
+                isLoading: isLoading,
               ),
             ),
-            SizedBox(width: 12),
+            const SizedBox(width: 12),
             Expanded(
-              child: StatCard(
-                countText: '13',
+              child: _StatCard(
+                countText: waitingCount.toString(),
                 labelText: 'قيد المتابعة',
                 icon: Icons.assignment_outlined,
-                iconBg: Color(0xFFFFF3E0),
-                iconFg: Color(0xFFF59E0B),
+                iconBg: const Color(0xFFFFF3E0),
+                iconFg: const Color(0xFFF59E0B),
+                isLoading: isLoading,
               ),
             ),
           ],
         ),
-        SizedBox(height: 12),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
           child: SizedBox(
-            width: 190,
-            child: StatCard(
-              countText: '20',
+            width: double.infinity,
+            child: _StatCard(
+              countText: closedCount.toString(),
               labelText: 'قد تم إغلاقه',
               icon: Icons.chat_bubble_outline,
-              iconBg: Color(0xFFFFEBEE),
-              iconFg: Color(0xFFEF4444),
+              iconBg: const Color(0xFFFFEBEE),
+              iconFg: const Color(0xFFEF4444),
+              isLoading: isLoading,
             ),
           ),
         ),
@@ -51,20 +66,21 @@ class HomeStatsSection extends StatelessWidget {
   }
 }
 
-class StatCard extends StatelessWidget {
+class _StatCard extends StatelessWidget {
   final String countText;
   final String labelText;
   final IconData icon;
   final Color iconBg;
   final Color iconFg;
+  final bool isLoading;
 
-  const StatCard({
-    super.key,
+  const _StatCard({
     required this.countText,
     required this.labelText,
     required this.icon,
     required this.iconBg,
     required this.iconFg,
+    this.isLoading = false,
   });
 
   @override
@@ -72,10 +88,7 @@ class StatCard extends StatelessWidget {
     final colors = ColorManager();
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 14,
-        vertical: 12,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: colors.cardBackground,
         borderRadius: BorderRadius.circular(14),
@@ -93,13 +106,24 @@ class StatCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(
-                  '$countText طلب',
-                  textAlign: TextAlign.right,
-                  style: AppTypography.bodyM.bold.copyWith(
-                    color: colors.textDark,
+                if (isLoading)
+                  SizedBox(
+                    height: 22,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: iconFg,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    '$countText طلب',
+                    textAlign: TextAlign.right,
+                    style: AppTypography.bodyM.bold.copyWith(
+                      color: colors.textDark,
+                    ),
                   ),
-                ),
                 const SizedBox(height: 4),
                 Text(
                   labelText,
@@ -115,10 +139,7 @@ class StatCard extends StatelessWidget {
           Container(
             width: 34,
             height: 34,
-            decoration: BoxDecoration(
-              color: iconBg,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
             child: Icon(icon, color: iconFg, size: 18),
           ),
         ],
@@ -126,4 +147,3 @@ class StatCard extends StatelessWidget {
     );
   }
 }
-

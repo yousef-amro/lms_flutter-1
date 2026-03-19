@@ -15,10 +15,7 @@ class HomeFiltersRow extends StatelessWidget {
           onPressed: () {},
           style: TextButton.styleFrom(
             foregroundColor: const Color(0xFF1FA971),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 6,
-              vertical: 8,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
           ),
           icon: const Icon(Icons.tune, size: 18),
           label: Text(
@@ -30,14 +27,13 @@ class HomeFiltersRow extends StatelessWidget {
         ),
         const Spacer(),
         Row(
+          textDirection: TextDirection.rtl,
           children: [
             Icon(Icons.swap_horiz, size: 16, color: colors.primary),
             const SizedBox(width: 6),
             Text(
               'المحادثات لدي',
-              style: AppTypography.bodyS.medium.copyWith(
-                color: colors.textDark,
-              ),
+              style: AppTypography.bodyS.medium.copyWith(color: colors.textDark),
             ),
           ],
         ),
@@ -45,4 +41,3 @@ class HomeFiltersRow extends StatelessWidget {
     );
   }
 }
-

@@ -1,6 +1,9 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/presentation/theme/color_manager.dart';
 import '../../../core/presentation/theme/text_manager.dart';
@@ -26,8 +29,8 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
   static const String _noCloseReasonSentinel = '__NO_CLOSE_REASON__';
 
   static const Color _onlineGreen = Color(0xFF00CD83);
-  static const Color _bubbleOut = Color(0xFFDCF8C6);
-  static const Color _userBubbleGreen = Color(0xFF0BAC4B);
+  static const Color _bubbleOut = Color(0xFFFFFFFF);
+  static const Color _userBubbleGreen = Color(0xFF3185ff);
   static const Color _sendButtonBg = Color(0xFFE8F5E9);
   static const Color _sendButtonIcon = Color(0xFF2E7D32);
 
@@ -40,12 +43,15 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
         ? (Get.arguments as Map)
         : <dynamic, dynamic>{};
 
-    _sessionId = (args['session_id']?.toString() ??
-            controller.currentSessionId.value ??
-            '')
-        .trim();
-    _requiresAcceptance = args['requires_acceptance'] == true ||
-        args['requires_acceptance']?.toString().toLowerCase() == 'true';
+    _sessionId =
+        (args['session_id']?.toString() ??
+                controller.currentSessionId.value ??
+                '')
+            .trim();
+    _requiresAcceptance =
+        args['requires_acceptance'] == true ||
+        args['requires_acceptance']?.toString().toLowerCase() ==
+            'true';
 
     // If it doesn't require acceptance, enable the chat right away.
     _isAccepted = !_requiresAcceptance;
@@ -73,7 +79,10 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
       if (!mounted) return;
 
       final session = controller.getCallCenterSessionById(_sessionId);
-      final ccStatus = session?['status']?.toString().trim().toLowerCase();
+      final ccStatus = session?['status']
+          ?.toString()
+          .trim()
+          .toLowerCase();
       String? reqStatus;
       for (final r in controller.incomingRequests) {
         final sid = r['session_id']?.toString().trim();
@@ -102,11 +111,13 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
             content: const Text('هل تريد قبول هذه المحادثة؟'),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(false),
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(false),
                 child: const Text('لا'),
               ),
               FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(true),
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(true),
                 child: const Text('نعم'),
               ),
             ],
@@ -126,8 +137,9 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
           });
         } catch (e) {
           // If backend says it's already closed, don't show the failure snackbar.
-          final updatedSession =
-              controller.getCallCenterSessionById(_sessionId);
+          final updatedSession = controller.getCallCenterSessionById(
+            _sessionId,
+          );
           final updatedStatusCallCenter = updatedSession?['status']
               ?.toString()
               .trim()
@@ -137,8 +149,10 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
           for (final r in controller.incomingRequests) {
             final sid = r['session_id']?.toString().trim();
             if (sid == _sessionId) {
-              updatedStatusIncoming =
-                  r['status']?.toString().trim().toLowerCase();
+              updatedStatusIncoming = r['status']
+                  ?.toString()
+                  .trim()
+                  .toLowerCase();
               break;
             }
           }
@@ -191,8 +205,19 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
             .trim();
     final peerName = args['peer_name']?.toString() ?? 'محادثة مباشرة';
 
+    final sessionData = controller.getCallCenterSessionById(
+      sessionId,
+    );
+    final argsPeerImage = args['peer_image']?.toString().trim();
+    final currentPeerImage = controller.currentSessionPeerImage.value
+        ?.trim();
+    final sheetPeerImage =
+        (argsPeerImage != null && argsPeerImage.isNotEmpty)
+        ? argsPeerImage
+        : currentPeerImage;
+
     return Directionality(
-      textDirection: TextDirection.ltr,
+      textDirection: ui.TextDirection.ltr,
       child: Scaffold(
         backgroundColor: colors.scaffoldBackground,
         appBar: AppBar(
@@ -225,6 +250,10 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                             return _CloseChatReasonSheet(
                               controller: controller,
                               colors: colors,
+                              sessionId: sessionId,
+                              peerName: peerName,
+                              peerImageUrl: sheetPeerImage,
+                              sessionData: sessionData,
                             );
                           },
                         );
@@ -271,7 +300,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                         fontWeight: FontWeight.w700,
                         color: colors.textDark,
                       ),
-                      textDirection: TextDirection.rtl,
+                      textDirection: ui.TextDirection.rtl,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
@@ -294,7 +323,7 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                             fontSize: 10,
                             color: colors.textMuted,
                           ),
-                          textDirection: TextDirection.rtl,
+                          textDirection: ui.TextDirection.rtl,
                         ),
                       ],
                     ),
@@ -342,106 +371,130 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
             Expanded(
               // Pending accept: no Obx here — GetX errors if Obx returns without
               // reading any .obs (e.g. before messages / loading are touched).
-              child: _requiresAcceptance && !_isAccepted && !_isChatClosed
+              child:
+                  _requiresAcceptance &&
+                      !_isAccepted &&
+                      !_isChatClosed
                   ? Center(
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
                           'اختر قبول أو إلغاء المحادثة للبدء',
                           style: AppTypography.bodyM.copyWith(
-                            color: colors.textDark.withValues(alpha: 0.65),
-                          ),
-                          textDirection: TextDirection.rtl,
-                        ),
-                      ),
-                    )
-                  : Obx(() {
-                final loading = controller.isLoadingMessages.value;
-                final msgs = controller.messages;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (_scroll.hasClients) {
-                    _scroll.jumpTo(_scroll.position.maxScrollExtent);
-                  }
-                });
-
-                final listChildren = <Widget>[
-                  _DateSeparator(colors: colors),
-                  const SizedBox(height: 16),
-                ];
-
-                if (msgs.isEmpty) {
-                  // While we fetch history, show a spinner instead of the empty-state text.
-                  if (loading) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: CircularProgressIndicator(),
-                      ),
-                    );
-                  }
-                  listChildren.add(
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'ابدأ المحادثة الآن',
-                          style: AppTypography.bodyM.copyWith(
                             color: colors.textDark.withValues(
                               alpha: 0.65,
                             ),
                           ),
-                          textDirection: TextDirection.rtl,
+                          textDirection: ui.TextDirection.rtl,
                         ),
                       ),
-                    ),
-                  );
-                } else {
-                  for (final m in msgs) {
-                    final sender = (m['sender'] is Map)
-                        ? (m['sender'] as Map<String, dynamic>)
-                        : null;
-                    final senderId = sender?['id']?.toString();
-                    final isFromMe =
-                        controller.userId.value != null &&
-                        senderId == controller.userId.value;
-                    final text = (m['text']?.toString() ?? '').trim();
-                    final fileUrl = m['file_url']?.toString();
-                    final content = text.isNotEmpty
-                        ? text
-                        : (fileUrl ?? '');
-                    final sentAt = m['sent_at'];
-                    DateTime timestamp = DateTime.now();
-                    if (sentAt != null) {
-                      if (sentAt is DateTime) {
-                        timestamp = sentAt;
-                      } else if (sentAt is String) {
-                        timestamp =
-                            DateTime.tryParse(sentAt) ?? timestamp;
+                    )
+                  : Obx(() {
+                      final loading =
+                          controller.isLoadingMessages.value;
+                      final msgs = controller.messages;
+                      WidgetsBinding.instance.addPostFrameCallback((
+                        _,
+                      ) {
+                        if (_scroll.hasClients) {
+                          _scroll.jumpTo(
+                            _scroll.position.maxScrollExtent,
+                          );
+                        }
+                      });
+
+                      final listChildren = <Widget>[
+                        _DateSeparator(colors: colors),
+                        const SizedBox(height: 16),
+                      ];
+
+                      if (msgs.isEmpty) {
+                        // While we fetch history, show a spinner instead of the empty-state text.
+                        if (loading) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+                        listChildren.add(
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                'ابدأ المحادثة الآن',
+                                style: AppTypography.bodyM.copyWith(
+                                  color: colors.textDark.withValues(
+                                    alpha: 0.65,
+                                  ),
+                                ),
+                                textDirection: ui.TextDirection.rtl,
+                              ),
+                            ),
+                          ),
+                        );
+                      } else {
+                        for (final m in msgs) {
+                          final sender = (m['sender'] is Map)
+                              ? (m['sender'] as Map<String, dynamic>)
+                              : null;
+                          final senderId = sender?['id']?.toString();
+                          final isFromMe =
+                              controller.userId.value != null &&
+                              senderId == controller.userId.value;
+                          final senderName = isFromMe
+                              ? (controller.userName.value?.trim() ??
+                                    '')
+                              : ((sender?['full_name'] ??
+                                                sender?['name'])
+                                            ?.toString()
+                                            .trim() ??
+                                        '')
+                                    .trim();
+                          final text = (m['text']?.toString() ?? '')
+                              .trim();
+                          final fileUrl = m['file_url']?.toString();
+                          final content = text.isNotEmpty
+                              ? text
+                              : (fileUrl ?? '');
+                          final sentAt = m['sent_at'];
+                          DateTime timestamp = DateTime.now();
+                          if (sentAt != null) {
+                            if (sentAt is DateTime) {
+                              timestamp = sentAt;
+                            } else if (sentAt is String) {
+                              timestamp =
+                                  DateTime.tryParse(sentAt) ??
+                                  timestamp;
+                            }
+                          }
+
+                          listChildren.add(
+                            _ChatBubble(
+                              text: content,
+                              isFromMe: isFromMe,
+                              timestamp: timestamp,
+                              senderName: senderName.isNotEmpty
+                                  ? senderName
+                                  : peerName,
+                              bubbleOutColor: _bubbleOut,
+                              bubbleInColor: _userBubbleGreen,
+                              colors: colors,
+                            ),
+                          );
+                        }
                       }
-                    }
 
-                    listChildren.add(
-                      _ChatBubble(
-                        text: content,
-                        isFromMe: isFromMe,
-                        timestamp: timestamp,
-                        bubbleOutColor: _bubbleOut,
-                        bubbleInColor: _userBubbleGreen,
-                        colors: colors,
-                      ),
-                    );
-                  }
-                }
-
-                return ListView(
-                  controller: _scroll,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 16,
-                  ),
-                  children: listChildren,
-                );
-              }),
+                      return ListView(
+                        controller: _scroll,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 16,
+                        ),
+                        children: listChildren,
+                      );
+                    }),
             ),
             SafeArea(
               top: false,
@@ -489,7 +542,7 @@ class _DateSeparator extends StatelessWidget {
           child: Text(
             'اليوم',
             style: AppTypography.bodyS.withColor(colors.textMuted),
-            textDirection: TextDirection.rtl,
+            textDirection: ui.TextDirection.rtl,
           ),
         ),
         Expanded(child: Divider(color: colors.divider, thickness: 1)),
@@ -503,6 +556,7 @@ class _ChatBubble extends StatelessWidget {
     required this.text,
     required this.isFromMe,
     required this.timestamp,
+    required this.senderName,
     required this.bubbleOutColor,
     required this.bubbleInColor,
     required this.colors,
@@ -511,6 +565,7 @@ class _ChatBubble extends StatelessWidget {
   final String text;
   final bool isFromMe;
   final DateTime timestamp;
+  final String senderName;
   final Color bubbleOutColor;
   final Color bubbleInColor;
   final ColorManager colors;
@@ -523,15 +578,11 @@ class _ChatBubble extends StatelessWidget {
     return '${hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')} $amPm';
   }
 
-  static String _formatTime(DateTime t) {
-    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (isFromMe) {
       return Align(
-        alignment: Alignment.centerLeft,
+        alignment: Alignment.centerRight,
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(
@@ -564,7 +615,7 @@ class _ChatBubble extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
                 ),
-                textDirection: TextDirection.rtl,
+                textDirection: ui.TextDirection.rtl,
               ),
               const SizedBox(height: 6),
               Row(
@@ -579,7 +630,7 @@ class _ChatBubble extends StatelessWidget {
                         fontSize: 15,
                         color: Colors.white,
                       ),
-                      textDirection: TextDirection.rtl,
+                      textDirection: ui.TextDirection.rtl,
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -597,7 +648,7 @@ class _ChatBubble extends StatelessWidget {
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.85),
                 ),
-                textDirection: TextDirection.ltr,
+                textDirection: ui.TextDirection.ltr,
               ),
             ],
           ),
@@ -606,50 +657,71 @@ class _ChatBubble extends StatelessWidget {
     }
 
     return Align(
-      alignment: Alignment.centerRight,
+      alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 10,
+          horizontal: 20,
+          vertical: 16,
         ),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+          maxWidth: MediaQuery.sizeOf(context).width * 0.9,
         ),
         decoration: BoxDecoration(
           color: bubbleOutColor,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(18),
-            topRight: Radius.circular(18),
-            bottomLeft: Radius.circular(4),
-            bottomRight: Radius.circular(18),
-          ),
+          borderRadius: BorderRadius.circular(28),
           boxShadow: [
             BoxShadow(
-              color: colors.black.withValues(alpha: 0.06),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
+              color: colors.black.withValues(alpha: 0.05),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (senderName.trim().isNotEmpty) ...[
+              Text(
+                senderName.trim(),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontFamily: AppFonts.ffShamelFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textDark,
+                  height: 1.35,
+                ),
+                textDirection: ui.TextDirection.rtl,
+              ),
+              const SizedBox(height: 6),
+            ],
             Text(
               text,
+              textAlign: TextAlign.right,
               style: TextStyle(
                 fontFamily: AppFonts.ffShamelFamily,
-                fontSize: 15,
+                fontSize: 16,
                 color: colors.textDark,
+                height: 1.45,
               ),
-              textDirection: TextDirection.rtl,
+              textDirection: ui.TextDirection.rtl,
             ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(timestamp),
-              style: TextStyle(fontSize: 11, color: colors.textMuted),
-              textDirection: TextDirection.ltr,
+            const SizedBox(height: 14),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              textDirection: ui.TextDirection.ltr,
+              children: [
+                Text(
+                  _formatTime12h(timestamp),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colors.textMuted,
+                  ),
+                  textDirection: ui.TextDirection.ltr,
+                ),
+              ],
             ),
           ],
         ),
@@ -695,7 +767,7 @@ class _ChatInputBar extends StatelessWidget {
           Expanded(
             child: TextField(
               controller: textController,
-              textDirection: TextDirection.rtl,
+              textDirection: ui.TextDirection.rtl,
               maxLines: 4,
               minLines: 1,
               enabled: enabled,
@@ -721,22 +793,7 @@ class _ChatInputBar extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 12),
             color: colors.divider,
           ),
-          IconButton(
-            onPressed: enabled ? () {} : null,
-            icon: Icon(
-              Icons.mic_none_outlined,
-              color: colors.textDark,
-              size: 22,
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 12,
-            ),
-            constraints: const BoxConstraints(
-              minWidth: 40,
-              minHeight: 40,
-            ),
-          ),
+
           IconButton(
             onPressed: enabled ? () {} : null,
             icon: Icon(
@@ -786,10 +843,18 @@ class _CloseChatReasonSheet extends StatefulWidget {
   const _CloseChatReasonSheet({
     required this.controller,
     required this.colors,
+    required this.sessionId,
+    required this.peerName,
+    required this.peerImageUrl,
+    required this.sessionData,
   });
 
   final ChatController controller;
   final ColorManager colors;
+  final String sessionId;
+  final String peerName;
+  final String? peerImageUrl;
+  final JsonMap? sessionData;
 
   @override
   State<_CloseChatReasonSheet> createState() =>
@@ -798,6 +863,12 @@ class _CloseChatReasonSheet extends StatefulWidget {
 
 class _CloseChatReasonSheetState
     extends State<_CloseChatReasonSheet> {
+  static const Color _closeRed = Color(0xFFD10009);
+  static const Color _sheetBackground = Color(0xFFF7F6F3);
+  static const Color _tileBorder = Color(0xFFEFEEEB);
+  static const Color _tileShadow = Color(0x14000000);
+  static const Color _mutedText = Color(0xFF98938D);
+
   bool _isLoading = true;
   String? _errorMessage;
   String? _selectedReasonId;
@@ -849,238 +920,454 @@ class _CloseChatReasonSheetState
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final sheetHeight = MediaQuery.sizeOf(context).height * 0.68;
-    final primary = widget.colors.primary;
+  JsonMap? get _resolvedSessionData =>
+      widget.sessionData ??
+      widget.controller.getCallCenterSessionById(widget.sessionId);
 
-    return Directionality(
-      textDirection: TextDirection.rtl,
-      child: SafeArea(
-        child: SizedBox(
-          height: sheetHeight,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            decoration: BoxDecoration(
-              color: widget.colors.cardBackground,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(24),
+  String get _startedAtLabel {
+    final session = _resolvedSessionData;
+    final rawCandidates = [
+      session?['started_at'],
+      session?['created_at'],
+      session?['assigned_at'],
+      session?['accepted_at'],
+      session?['updated_at'],
+    ];
+
+    String? rawValue;
+    for (final candidate in rawCandidates) {
+      final normalized = candidate?.toString().trim();
+      if (normalized != null &&
+          normalized.isNotEmpty &&
+          normalized.toLowerCase() != 'null') {
+        rawValue = normalized;
+        break;
+      }
+    }
+
+    if (rawValue == null) return 'تم بدء الجلسة حديثاً';
+
+    final parsed = DateTime.tryParse(rawValue);
+    if (parsed == null) return rawValue;
+
+    final formatted = DateFormat(
+      'd MMMM y',
+      'ar',
+    ).format(parsed.toLocal());
+    return 'تم البدء في $formatted';
+  }
+
+  Widget _buildHeader() {
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: Text(
+              'إغلاق الجلسة',
+              style: AppTypography.bodyM.bold.copyWith(
+                fontFamily: AppFonts.ffShamelFamily,
+                color: widget.colors.textDark,
+                fontSize: 18,
+              ),
+              textDirection: ui.TextDirection.rtl,
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: IconButton(
+              onPressed: () => Navigator.pop(context, null),
+              style: IconButton.styleFrom(
+                padding: EdgeInsets.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: Icon(
+                Icons.close_rounded,
+                color: widget.colors.infoBlue,
+                size: 18,
               ),
             ),
-            child: Column(
-              children: [
-                Container(
-                  width: 44,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: widget.colors.divider,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'لماذا تريد إغلاق المحادثة؟',
-                    style: AppTypography.bodyM.bold.copyWith(
-                      fontFamily: AppFonts.ffShamelFamily,
-                      color: widget.colors.textDark,
-                      fontSize: 16,
-                    ),
-                    textDirection: TextDirection.rtl,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
-                      : _errorMessage != null
-                      ? Center(
-                          child: Text(
-                            _errorMessage!,
-                            style: AppTypography.bodyS.copyWith(
-                              color: widget.colors.error,
-                              fontFamily: AppFonts.ffShamelFamily,
-                            ),
-                            textDirection: TextDirection.rtl,
-                          ),
-                        )
-                      : _reasons.isEmpty
-                      ? Center(
-                          child: Text(
-                            'لا توجد أسباب متاحة للإغلاق',
-                            style: AppTypography.bodyS.copyWith(
-                              color: widget.colors.textMuted,
-                              fontFamily: AppFonts.ffShamelFamily,
-                            ),
-                            textDirection: TextDirection.rtl,
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: _reasons.length,
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(height: 10),
-                          padding: EdgeInsets.zero,
-                          itemBuilder: (context, index) {
-                            final reason = _reasons[index];
-                            final id = reason['id']?.toString() ?? '';
-                            final name =
-                                reason['name']?.toString() ?? '';
-                            final isSelected =
-                                _selectedReasonId == id;
+          ),
+        ],
+      ),
+    );
+  }
 
-                            return Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(
-                                  16,
-                                ),
-                                onTap: () {
-                                  setState(() {
-                                    _selectedReasonId = id;
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? primary.withValues(
-                                            alpha: 0.08,
-                                          )
-                                        : widget
-                                              .colors
-                                              .cardBackground,
-                                    borderRadius:
-                                        BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? primary
-                                          : widget.colors.divider,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    textDirection: TextDirection.rtl,
-                                    children: [
-                                      Icon(
-                                        isSelected
-                                            ? Icons
-                                                  .radio_button_checked_rounded
-                                            : Icons
-                                                  .radio_button_off_rounded,
-                                        color: isSelected
-                                            ? primary
-                                            : widget.colors.textMuted,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          name,
-                                          style: AppTypography
-                                              .bodyS
-                                              .semiBold
-                                              .copyWith(
-                                                fontFamily: AppFonts
-                                                    .ffShamelFamily,
-                                                color: widget
-                                                    .colors
-                                                    .textDark,
-                                              ),
-                                          textDirection:
-                                              TextDirection.rtl,
-                                          maxLines: 2,
-                                          overflow:
-                                              TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+  Widget _buildParticipantCard() {
+    final imageUrl = widget.peerImageUrl?.trim();
+    final hasImage = imageUrl != null && imageUrl.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 14,
+      ),
+      decoration: BoxDecoration(
+        color: widget.colors.forceWhite,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(
+            color: _tileShadow,
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: hasImage
+                ? null
+                : widget.colors.primary.withValues(alpha: 0.10),
+            backgroundImage: hasImage ? NetworkImage(imageUrl) : null,
+            child: hasImage
+                ? null
+                : Icon(
+                    Icons.person_rounded,
+                    color: widget.colors.infoBlue,
+                    size: 28,
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  widget.peerName.trim().isNotEmpty
+                      ? widget.peerName.trim()
+                      : 'الطالب',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodyM.bold.copyWith(
+                    fontFamily: AppFonts.ffShamelFamily,
+                    color: widget.colors.textDark,
+                  ),
+                  textDirection: ui.TextDirection.rtl,
+                  textAlign: TextAlign.right,
                 ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.pop(context, null);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: widget.colors.textDark,
-                          side: BorderSide(
-                            color: widget.colors.divider,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                        ),
-                        child: Text(
-                          'الإلغاء',
-                          style: AppTypography.bodyM.semiBold
-                              .copyWith(
-                                fontFamily: AppFonts.ffShamelFamily,
-                              ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                if (_selectedReasonId != null) {
-                                  Navigator.pop(
-                                    context,
-                                    _selectedReasonId,
-                                  );
-                                } else {
-                                  Navigator.pop(
-                                    context,
-                                    _ChatSessionScreenState
-                                        ._noCloseReasonSentinel,
-                                  );
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: widget.colors.error,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(22),
-                          ),
-                          disabledBackgroundColor: widget.colors.error
-                              .withValues(alpha: 0.45),
-                        ),
-                        child: Text(
-                          _selectedReasonId != null
-                              ? 'تأكيد إغلاق'
-                              : 'تأكيد إغلاق بدون سبب',
-                          style: AppTypography.bodyM.semiBold
-                              .copyWith(
-                                fontFamily: AppFonts.ffShamelFamily,
-                              ),
-                        ),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 2),
+                Text(
+                  _startedAtLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.captionM.copyWith(
+                    fontFamily: AppFonts.ffShamelFamily,
+                    color: _mutedText,
+                  ),
+                  textDirection: ui.TextDirection.rtl,
+                  textAlign: TextAlign.right,
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRadioIndicator(bool isSelected) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: isSelected
+            ? _closeRed.withValues(alpha: 0.08)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isSelected
+                  ? _closeRed
+                  : widget.colors.divider.withValues(alpha: 0.95),
+              width: isSelected ? 1.8 : 1.2,
+            ),
+          ),
+          child: isSelected
+              ? Center(
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _closeRed,
+                    ),
+                  ),
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReasonTile(JsonMap reason) {
+    final id = reason['id']?.toString() ?? '';
+    final name = reason['name']?.toString().trim() ?? '';
+    final isSelected = _selectedReasonId == id;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () {
+          setState(() {
+            _selectedReasonId = id;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 12,
+          ),
+          decoration: BoxDecoration(
+            color: widget.colors.forceWhite,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isSelected
+                  ? _closeRed.withValues(alpha: 0.35)
+                  : _tileBorder,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: _tileShadow,
+                blurRadius: 16,
+                offset: Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _buildRadioIndicator(isSelected),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.bodyS.semiBold.copyWith(
+                    fontFamily: AppFonts.ffShamelFamily,
+                    color: isSelected
+                        ? _closeRed
+                        : widget.colors.textDark,
+                    height: 1.3,
+                  ),
+                  textDirection: ui.TextDirection.rtl,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSheetBody() {
+    if (_isLoading) {
+      return Center(
+        child: CircularProgressIndicator(color: widget.colors.safe),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Text(
+          _errorMessage!,
+          style: AppTypography.bodyS.copyWith(
+            color: widget.colors.error,
+            fontFamily: AppFonts.ffShamelFamily,
+          ),
+          textDirection: ui.TextDirection.rtl,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (_reasons.isEmpty) {
+      return Center(
+        child: Text(
+          'لا توجد أسباب متاحة للإغلاق',
+          style: AppTypography.bodyS.copyWith(
+            color: widget.colors.textMuted,
+            fontFamily: AppFonts.ffShamelFamily,
+          ),
+          textDirection: ui.TextDirection.rtl,
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: _reasons.length,
+      shrinkWrap: true,
+      primary: false,
+      padding: EdgeInsets.zero,
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: 12),
+      itemBuilder: (context, index) =>
+          _buildReasonTile(_reasons[index]),
+    );
+  }
+
+  Widget _buildBodySection(double screenHeight) {
+    if (_isLoading || _errorMessage != null || _reasons.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: _buildSheetBody(),
+      );
+    }
+
+    return Flexible(
+      fit: FlexFit.loose,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: screenHeight * 0.34),
+        child: _buildSheetBody(),
+      ),
+    );
+  }
+
+  Widget _buildBackButton() {
+    return SizedBox(
+      width: 54,
+      height: 54,
+      child: Material(
+        color: const ui.Color.fromARGB(255, 219, 219, 219),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => Navigator.pop(context, null),
+          child: Center(
+            child: Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 18,
+              color: widget.colors.textDark.withValues(alpha: 0.82),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmButton() {
+    return SizedBox(
+      height: 54,
+      child: ElevatedButton(
+        onPressed: _isLoading
+            ? null
+            : () {
+                if (_selectedReasonId != null) {
+                  Navigator.pop(context, _selectedReasonId);
+                  return;
+                }
+
+                Navigator.pop(
+                  context,
+                  _ChatSessionScreenState._noCloseReasonSentinel,
+                );
+              },
+        style: ElevatedButton.styleFrom(
+          elevation: 0,
+          backgroundColor: widget.colors.safe,
+          foregroundColor: widget.colors.forceWhite,
+          disabledBackgroundColor: widget.colors.safe.withValues(
+            alpha: 0.45,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'تأكيد ومتابعة',
+              style: AppTypography.bodyM.semiBold.copyWith(
+                fontFamily: AppFonts.ffShamelFamily,
+                color: widget.colors.forceWhite,
+              ),
+              textDirection: ui.TextDirection.rtl,
+            ),
+            const SizedBox(width: 10),
+            Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 16,
+              color: widget.colors.forceWhite.withValues(alpha: 0.96),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.sizeOf(context).height;
+
+    return Directionality(
+      textDirection: ui.TextDirection.rtl,
+      child: SafeArea(
+        top: false,
+        child: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: screenHeight * 0.80,
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(22, 18, 22, 20),
+              decoration: const BoxDecoration(
+                color: _sheetBackground,
+                borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(34),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 18),
+                  _buildParticipantCard(),
+                  const SizedBox(height: 18),
+                  Text(
+                    'يرجى تحديد سبب إغلاق الجلسة المذكورة مع بيان السبب التوضيحي إن أمكن:',
+                    textAlign: TextAlign.center,
+                    style: AppTypography.bodyS.copyWith(
+                      fontFamily: AppFonts.ffShamelFamily,
+                      color: const ui.Color.fromARGB(255, 0, 0, 0),
+                      height: 1.45,
+                    ),
+                    textDirection: ui.TextDirection.rtl,
+                  ),
+                  const SizedBox(height: 18),
+                  _buildBodySection(screenHeight),
+                  const SizedBox(height: 18),
+                  Row(
+                    textDirection: ui.TextDirection.ltr,
+                    children: [
+                      _buildBackButton(),
+                      const SizedBox(width: 14),
+                      Expanded(child: _buildConfirmButton()),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

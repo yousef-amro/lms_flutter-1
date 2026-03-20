@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/presentation/theme/color_manager.dart';
 import '../../../core/presentation/theme/text_manager.dart';
@@ -285,20 +286,49 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                     height: 24,
                   ),
                 ),
-                IconButton(
-                  onPressed: () async {
-                    if (!mounted) return;
-                    await controller.setAttachmentPermission(
-                      sessionId: sessionId,
-                      allow: true,
-                    );
-                  },
-                  icon: Icon(
-                    Icons.attach_file_rounded,
-                    size: 22,
-                    color: colors.textDark,
-                  ),
-                ),
+                Obx(() {
+                  final allow = controller.allowAttachments.value;
+                  return IconButton(
+                    onPressed: () async {
+                      if (!mounted) return;
+                      final nextAllow = !allow;
+
+                      // Optimistic UI update; backend will confirm via WS event.
+                      controller.allowAttachments.value = nextAllow;
+                      try {
+                        await controller.setAttachmentPermission(
+                          sessionId: sessionId,
+                          allow: nextAllow,
+                        );
+                        if (!mounted) return;
+                        if (nextAllow) {
+                          controller.sendText(
+                            sessionId: sessionId,
+                            text: 'تم السماح لرفع المرفقات',
+                          );
+                        } else {
+                          controller.sendText(
+                            sessionId: sessionId,
+                            text: 'تم إلغاء السماح لرفع المرفقات',
+                          );
+                        }
+                      } catch (e) {
+                        controller.allowAttachments.value = allow;
+                        if (!mounted) return;
+                        Get.snackbar(
+                          'خطأ',
+                          'تعذر تغيير إذن المرفقات. حاول مرة أخرى.',
+                          snackPosition: SnackPosition.TOP,
+                        );
+                      }
+                    },
+                    icon: Icon(
+                      Icons.attach_file_rounded,
+                      size: 22,
+                      color: allow ? colors.primary : colors.textMuted,
+                    ),
+                  );
+                }),
               ],
             ],
           ),
@@ -522,72 +552,80 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
                 color: colors.scaffoldBackground,
-                child: _ChatInputBar(
-                  textController: _textController,
-                  enabled: _isAccepted && !_isUploadingAttachment,
-                  onSend: () {
-                    if (!_isAccepted || _isUploadingAttachment) return;
-                    final text = _textController.text.trim();
-                    if (text.isEmpty || sessionId.isEmpty) return;
-                    _textController.clear();
-                    controller.sendText(
-                      sessionId: sessionId,
-                      text: text,
-                    );
-                  },
-                  onAttach: () async {
-                    if (_isUploadingAttachment) return;
-                    if (sessionId.isEmpty) return;
-
-                    final picked = await FilePicker.platform.pickFiles(
-                      allowMultiple: false,
-                      withData: false,
-                    );
-                    if (!mounted || picked == null || picked.files.isEmpty) {
-                      return;
-                    }
-
-                    final file = picked.files.first;
-                    final path = file.path?.trim() ?? '';
-                    if (path.isEmpty) {
-                      Get.snackbar(
-                        'خطأ',
-                        'تعذر قراءة الملف المختار.',
-                        snackPosition: SnackPosition.TOP,
-                      );
-                      return;
-                    }
-
-                    setState(() => _isUploadingAttachment = true);
-                    try {
-                      final attachmentId =
-                          await controller.uploadChatAttachment(
-                            sessionId: sessionId,
-                            filePath: path,
-                            fileName: file.name,
-                          );
-
-                      await controller.sendAttachment(
+                child: Obx(() {
+                  final allowAttachments = controller.allowAttachments.value;
+                  return _ChatInputBar(
+                    textController: _textController,
+                    enabled: _isAccepted && !_isUploadingAttachment,
+                    attachmentsEnabled: allowAttachments &&
+                        _isAccepted &&
+                        !_isUploadingAttachment,
+                    onSend: () {
+                      if (!_isAccepted || _isUploadingAttachment) return;
+                      final text = _textController.text.trim();
+                      if (text.isEmpty || sessionId.isEmpty) return;
+                      _textController.clear();
+                      controller.sendText(
                         sessionId: sessionId,
-                        attachmentId: attachmentId,
+                        text: text,
                       );
-                    } catch (e) {
-                      if (!mounted) return;
-                      Get.snackbar(
-                        'خطأ',
-                        'تعذر إرسال المرفق. حاول مرة أخرى.',
-                        snackPosition: SnackPosition.TOP,
+                    },
+                    onAttach: () async {
+                      if (_isUploadingAttachment) return;
+                      if (sessionId.isEmpty) return;
+
+                      final picked = await FilePicker.platform.pickFiles(
+                        allowMultiple: false,
+                        withData: false,
                       );
-                    } finally {
-                      if (mounted) {
-                        setState(() => _isUploadingAttachment = false);
+                      if (!mounted ||
+                          picked == null ||
+                          picked.files.isEmpty) {
+                        return;
                       }
-                    }
-                  },
-                  colors: colors,
-                  sendButtonBg: _sendButtonBg,
-                  sendButtonIcon: _sendButtonIcon,
-                ),
+
+                      final file = picked.files.first;
+                      final path = file.path?.trim() ?? '';
+                      if (path.isEmpty) {
+                        Get.snackbar(
+                          'خطأ',
+                          'تعذر قراءة الملف المختار.',
+                          snackPosition: SnackPosition.TOP,
+                        );
+                        return;
+                      }
+
+                      setState(() => _isUploadingAttachment = true);
+                      try {
+                        final attachmentId =
+                            await controller.uploadChatAttachment(
+                              sessionId: sessionId,
+                              filePath: path,
+                              fileName: file.name,
+                            );
+
+                        await controller.sendAttachment(
+                          sessionId: sessionId,
+                          attachmentId: attachmentId,
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        Get.snackbar(
+                          'خطأ',
+                          'تعذر إرسال المرفق. حاول مرة أخرى.',
+                          snackPosition: SnackPosition.TOP,
+                        );
+                      } finally {
+                        if (mounted) {
+                          setState(() => _isUploadingAttachment = false);
+                        }
+                      }
+                    },
+                    colors: colors,
+                    sendButtonBg: _sendButtonBg,
+                    sendButtonIcon: _sendButtonIcon,
+                  );
+                }),
               ),
             ),
           ],
@@ -668,6 +706,14 @@ class _ChatBubble extends StatelessWidget {
         lower.endsWith('.mkv');
   }
 
+  static bool _isPdfAttachment(String? url, String? type) {
+    if (url == null || url.trim().isEmpty) return false;
+    final t = (type ?? '').toLowerCase();
+    if (t == 'pdf') return true;
+    final lower = url.toLowerCase();
+    return lower.endsWith('.pdf');
+  }
+
   static String _formatTime12h(DateTime t) {
     final hour = t.hour > 12
         ? t.hour - 12
@@ -718,6 +764,103 @@ class _ChatBubble extends StatelessWidget {
       context: context,
       barrierColor: Colors.black87,
       builder: (ctx) => _VideoPlayerDialog(videoUrl: url),
+    );
+  }
+
+  static String _extractFileName(String url) {
+    try {
+      final uri = Uri.parse(url);
+      final segs = uri.pathSegments;
+      if (segs.isNotEmpty) return segs.last;
+    } catch (_) {}
+    final parts = url.split('/');
+    return parts.isNotEmpty ? parts.last : url;
+  }
+
+  static Future<void> _openPdfInBrowser(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      Get.snackbar('PDF', 'Invalid PDF url', snackPosition: SnackPosition.TOP);
+      return;
+    }
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      Get.snackbar('PDF', 'تعذر فتح ملف الـ PDF', snackPosition: SnackPosition.TOP);
+    }
+  }
+
+  Widget _buildPdfThumbnail(double maxWidth, VoidCallback onOpen) {
+    const double width = 200;
+    const double height = 180;
+    final name = _extractFileName(fileUrl ?? '');
+    return GestureDetector(
+      onTap: onOpen,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: width,
+          height: height,
+          color: Colors.white.withValues(alpha: 0.06),
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              Positioned.fill(
+                child: Container(
+                  color: colors.divider.withValues(alpha: 0.55),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 18,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.picture_as_pdf_rounded,
+                          size: 56,
+                          color: colors.textMuted,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontFamily: AppFonts.ffShamelFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: colors.textDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.open_in_full_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -813,6 +956,7 @@ class _ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final isImage = _isImageAttachment(fileUrl, messageType);
     final isVideo = _isVideoAttachment(fileUrl, messageType);
+    final isPdf = _isPdfAttachment(fileUrl, messageType);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final maxBubbleWidth = screenWidth * 0.78;
 
@@ -873,6 +1017,13 @@ class _ChatBubble extends StatelessWidget {
                 _buildVideoThumbnail(
                   screenWidth,
                   () => _showFullScreenVideo(context, fileUrl!),
+                )
+              else if (isPdf)
+                _buildPdfThumbnail(
+                  screenWidth,
+                  () {
+                    _openPdfInBrowser(fileUrl!);
+                  },
                 )
               else
                 Row(
@@ -978,6 +1129,13 @@ class _ChatBubble extends StatelessWidget {
               _buildVideoThumbnail(
                 screenWidth,
                 () => _showFullScreenVideo(context, fileUrl!),
+              )
+            else if (isPdf)
+              _buildPdfThumbnail(
+                screenWidth,
+                () {
+                  _openPdfInBrowser(fileUrl!);
+                },
               )
             else
               Text(
@@ -1097,6 +1255,7 @@ class _ChatInputBar extends StatelessWidget {
     required this.onSend,
     required this.onAttach,
     required this.enabled,
+    required this.attachmentsEnabled,
     required this.colors,
     required this.sendButtonBg,
     required this.sendButtonIcon,
@@ -1106,6 +1265,7 @@ class _ChatInputBar extends StatelessWidget {
   final VoidCallback onSend;
   final VoidCallback onAttach;
   final bool enabled;
+  final bool attachmentsEnabled;
   final ColorManager colors;
   final Color sendButtonBg;
   final Color sendButtonIcon;
@@ -1159,10 +1319,12 @@ class _ChatInputBar extends StatelessWidget {
           ),
 
           IconButton(
-            onPressed: enabled ? onAttach : null,
+            onPressed: attachmentsEnabled ? onAttach : null,
             icon: Icon(
               Icons.attach_file_rounded,
-              color: colors.textDark,
+              color: attachmentsEnabled
+                  ? colors.textDark
+                  : colors.textMuted,
               size: 22,
             ),
             padding: const EdgeInsets.symmetric(

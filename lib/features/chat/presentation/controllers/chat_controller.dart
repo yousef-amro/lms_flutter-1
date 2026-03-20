@@ -1144,7 +1144,16 @@ class ChatController extends GetxController {
             lower == 'already_closed') {
           return;
         }
-        Get.snackbar('WS', message, snackPosition: SnackPosition.TOP);
+        final display = switch (message) {
+          'ws_dns_failed' =>
+            'No internet / DNS: could not resolve server. Check connection (emulator: cold boot or DNS 8.8.8.8).',
+          'ws_network_unreachable' =>
+            'Network error: could not reach chat server. Check Wi‑Fi or VPN.',
+          'socket_error' =>
+            'Chat connection lost. Retrying…',
+          _ => message,
+        };
+        Get.snackbar('WS', display, snackPosition: SnackPosition.TOP);
         break;
     }
   }

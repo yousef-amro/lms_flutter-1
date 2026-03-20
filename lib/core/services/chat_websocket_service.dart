@@ -10,6 +10,21 @@ import 'token_manager_service.dart';
 
 typedef JsonMap = Map<String, dynamic>;
 
+/// Maps low-level IO/WebSocket failures to a short UI/snackbar code.
+String _mapWebSocketFailure(Object err) {
+  final s = err.toString();
+  if (s.contains('Failed host lookup') ||
+      s.contains('No address associated with hostname')) {
+    return 'ws_dns_failed';
+  }
+  if (s.contains('Network is unreachable') ||
+      s.contains('Connection refused') ||
+      s.contains('timed out')) {
+    return 'ws_network_unreachable';
+  }
+  return 'socket_error';
+}
+
 class ChatWebSocketService {
   final SecureStorageService _secureStorage;
   final TokenManagerService _tokenManager;
@@ -56,7 +71,18 @@ class ChatWebSocketService {
       final wsUrl = _buildChatWsUrl(baseUrl.toString(), token);
 
       log('ChatWS: connecting to $wsUrl');
-      _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      try {
+        _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      } catch (e, st) {
+        log('ChatWS: connect() threw: $e', stackTrace: st);
+        _connectionState.add(false);
+        if (!_isClosedByUser) {
+          _events.add({'type': 'error', 'message': _mapWebSocketFailure(e)});
+          _scheduleReconnect();
+        }
+        return;
+      }
+
       _connectionState.add(true);
       _reconnectAttempt = 0;
 
@@ -75,7 +101,7 @@ class ChatWebSocketService {
         },
         onError: (err, st) {
           log('ChatWS: stream error: $err');
-          _events.add({'type': 'error', 'message': 'socket_error'});
+          _events.add({'type': 'error', 'message': _mapWebSocketFailure(err)});
           _handleDisconnect();
         },
         onDone: () {
@@ -84,6 +110,23 @@ class ChatWebSocketService {
         },
         cancelOnError: true,
       );
+    } on StateError catch (e) {
+      log('ChatWS: token/state error: $e');
+      _connectionState.add(false);
+      if (!_isClosedByUser) {
+        _events.add({
+          'type': 'error',
+          'message': e.message,
+        });
+        _scheduleReconnect();
+      }
+    } catch (e, st) {
+      log('ChatWS: unexpected connect error: $e', stackTrace: st);
+      _connectionState.add(false);
+      if (!_isClosedByUser) {
+        _events.add({'type': 'error', 'message': _mapWebSocketFailure(e)});
+        _scheduleReconnect();
+      }
     } finally {
       _isConnecting = false;
     }

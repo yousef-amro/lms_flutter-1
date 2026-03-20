@@ -554,12 +554,18 @@ class _ChatSessionScreenState extends State<ChatSessionScreen> {
                 color: colors.scaffoldBackground,
                 child: Obx(() {
                   final allowAttachments = controller.allowAttachments.value;
+                  final isCallCenter =
+                      controller.role.value == 'call_center';
+                  // Student uploads follow session allow_attachments; agents can
+                  // still attach regardless (same as backend: permission is for the student).
+                  final attachmentsEnabled =
+                      (isCallCenter || allowAttachments) &&
+                      _isAccepted &&
+                      !_isUploadingAttachment;
                   return _ChatInputBar(
                     textController: _textController,
                     enabled: _isAccepted && !_isUploadingAttachment,
-                    attachmentsEnabled: allowAttachments &&
-                        _isAccepted &&
-                        !_isUploadingAttachment,
+                    attachmentsEnabled: attachmentsEnabled,
                     onSend: () {
                       if (!_isAccepted || _isUploadingAttachment) return;
                       final text = _textController.text.trim();

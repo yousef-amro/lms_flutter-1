@@ -201,7 +201,7 @@ If `action` is missing or not recognized, the server responds with:
 | `allow`      | boolean | optional | `true` to allow attachments, `false` to disallow. Defaults to `false`. |
 
 
-**Example:**
+**Example (allow student uploads):**
 
 ```json
 {
@@ -212,6 +212,20 @@ If `action` is missing or not recognized, the server responds with:
   }
 }
 ```
+
+**Example (revoke student uploads):**
+
+```json
+{
+  "action": "set_attachment_permission",
+  "payload": {
+    "session_id": "660e8400-e29b-41d4-a716-446655440001",
+    "allow": false
+  }
+}
+```
+
+Call center agents should still be able to send their own attachments over REST/`send_message` where the backend allows it; `allow` only controls whether the **student** may attach.
 
 **Possible responses:**
 

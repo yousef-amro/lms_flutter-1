@@ -1135,25 +1135,6 @@ class ChatController extends GetxController {
         break;
 
       case 'error':
-        final message = event['message']?.toString() ?? 'error';
-        final lower = message.toLowerCase();
-        // Avoid noisy "failed" snackbars when the backend already closed the chat.
-        if (lower.contains('already_closed') ||
-            lower.contains('already closed') ||
-            lower.contains('chat_closed') ||
-            lower == 'already_closed') {
-          return;
-        }
-        final display = switch (message) {
-          'ws_dns_failed' =>
-            'No internet / DNS: could not resolve server. Check connection (emulator: cold boot or DNS 8.8.8.8).',
-          'ws_network_unreachable' =>
-            'Network error: could not reach chat server. Check Wi‑Fi or VPN.',
-          'socket_error' =>
-            'Chat connection lost. Retrying…',
-          _ => message,
-        };
-        Get.snackbar('WS', display, snackPosition: SnackPosition.TOP);
         break;
     }
   }

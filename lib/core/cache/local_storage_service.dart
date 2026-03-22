@@ -21,12 +21,12 @@ abstract class BaseStorage {
 
   SharedPreferences? get sharedPreferences => _sharedPreferences;
 
-  void remove(LocalStorageKeys key) {
-    _sharedPreferences?.remove(key.key);
+  Future<void> remove(LocalStorageKeys key) async {
+    await _sharedPreferences?.remove(key.key);
   }
 
-  void clear() {
-    _sharedPreferences?.clear();
+  Future<void> clear() async {
+    await _sharedPreferences?.clear();
   }
 }
 
@@ -35,17 +35,25 @@ class LocalStorageService extends BaseStorage {
   static final LocalStorageService _instance = LocalStorageService._();
   factory LocalStorageService() => _instance;
 
-  set locale(String languageCode) => sharedPreferences?.setString(
-    LocalStorageKeys.languageCode.key,
-    languageCode,
-  );
+  Future<void> setLocale(String languageCode) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.languageCode.key,
+      languageCode,
+    );
+  }
 
-  set user(UserModel data) {
-    _sharedPreferences?.setString(
+  // Backwards-compatible setter (not awaitable).
+  set locale(String languageCode) => setLocale(languageCode);
+
+  Future<void> setUser(UserModel data) async {
+    await sharedPreferences?.setString(
       LocalStorageKeys.user.key,
       jsonEncode(data.toJson()),
     );
   }
+
+  // Backwards-compatible setter (not awaitable).
+  set user(UserModel data) => setUser(data);
 
   UserModel? get user {
     final data = _sharedPreferences?.getString(LocalStorageKeys.user.key);
@@ -58,33 +66,55 @@ class LocalStorageService extends BaseStorage {
   String get versionName =>
       sharedPreferences?.getString(LocalStorageKeys.versionName.key) ?? '1.0.0';
 
-  set versionName(String versionName) => sharedPreferences?.setString(
-    LocalStorageKeys.versionName.key,
-    versionName,
-  );
+  Future<void> setVersionName(String versionName) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.versionName.key,
+      versionName,
+    );
+  }
+
+  // Backwards-compatible setter (not awaitable).
+  set versionName(String versionName) => setVersionName(versionName);
 
   String get versionNumber =>
       sharedPreferences?.getString(LocalStorageKeys.versionNumber.key) ?? '1';
 
-  set versionNumber(String versionNumber) => sharedPreferences?.setString(
-    LocalStorageKeys.versionNumber.key,
-    versionNumber,
-  );
+  Future<void> setVersionNumber(String versionNumber) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.versionNumber.key,
+      versionNumber,
+    );
+  }
+
+  // Backwards-compatible setter (not awaitable).
+  set versionNumber(String versionNumber) => setVersionNumber(versionNumber);
 
   String get deviceTimezone =>
       sharedPreferences?.getString(LocalStorageKeys.deviceTimezone.key) ??
       'Asia/Amman';
 
-  set deviceTimezone(String deviceTimezone) => sharedPreferences?.setString(
-    LocalStorageKeys.deviceTimezone.key,
-    deviceTimezone,
-  );
+  Future<void> setDeviceTimezone(String deviceTimezone) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.deviceTimezone.key,
+      deviceTimezone,
+    );
+  }
+
+  // Backwards-compatible setter (not awaitable).
+  set deviceTimezone(String deviceTimezone) => setDeviceTimezone(deviceTimezone);
 
   String get locale =>
-      sharedPreferences?.getString(LocalStorageKeys.languageCode.key) ?? 'en';
+      sharedPreferences?.getString(LocalStorageKeys.languageCode.key) ?? 'ar';
 
-  set themeMode(ThemeMode value) =>
-      sharedPreferences?.setString(LocalStorageKeys.themeMode.key, value.name);
+  Future<void> setThemeMode(ThemeMode value) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.themeMode.key,
+      value.name,
+    );
+  }
+
+  // Backwards-compatible setter (not awaitable).
+  set themeMode(ThemeMode value) => setThemeMode(value);
 
   ThemeMode get themeMode {
     // Default: always return light theme.
@@ -122,4 +152,33 @@ class LocalStorageService extends BaseStorage {
   }
 
   bool get isDarkMode => themeMode == ThemeMode.dark;
+
+  /// Persisted list of chat sessions this call-center agent has accepted.
+  /// Each item: { "session_id", "peer_name", "node_title" }.
+  List<Map<String, String>> getAssignedChatSessions() {
+    final raw =
+        sharedPreferences?.getString(LocalStorageKeys.assignedChatSessions.key);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>?;
+      if (list == null) return [];
+      return list.map((e) {
+        if (e is! Map) return null;
+        final m = <String, String>{};
+        for (final entry in e.entries) {
+          m[entry.key.toString()] = entry.value?.toString() ?? '';
+        }
+        return m['session_id']?.isNotEmpty == true ? m : null;
+      }).whereType<Map<String, String>>().toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> setAssignedChatSessions(List<Map<String, String>> sessions) async {
+    await sharedPreferences?.setString(
+      LocalStorageKeys.assignedChatSessions.key,
+      jsonEncode(sessions),
+    );
+  }
 }

@@ -2,7 +2,10 @@ import 'package:get/get.dart';
 
 import '../../../features/auth/binding/auth_binding.dart';
 import '../../../features/auth/presentation/login/login_screen.dart';
-import '../../../features/auth/presentation/login/reset_password_screen.dart';
+import '../../../features/chat/binding/chat_binding.dart';
+import '../../../features/chat/presentation/chat_inbox_screen.dart';
+import '../../../features/chat/presentation/chat_session_screen.dart';
+import '../../../features/home/presentation/home_screen.dart';
 import '../../../features/splash/binding/splash_binding.dart';
 import '../../../features/splash/presentation/splash_screen.dart';
 import 'app_routes.dart';
@@ -25,7 +28,24 @@ class AppNavigator {
         page: () => LoginScreen(),
         bindings: [AuthBinding()],
       ),
-      GetPage(name: AppRoutes.resetPassword, page: () => ResetPasswordScreen()),
+
+      // Home
+      GetPage(
+        name: AppRoutes.home,
+        page: () => const HomeScreen(),
+      ),
+
+      // Chat
+      GetPage(
+        name: AppRoutes.chatInbox,
+        page: () => const ChatInboxScreen(),
+        bindings: [ChatBinding()],
+      ),
+      GetPage(
+        name: AppRoutes.chatSession,
+        page: () => const ChatSessionScreen(),
+        bindings: [ChatBinding()],
+      ),
     ];
   }
 }

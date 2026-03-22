@@ -1,6 +1,7 @@
 import 'package:dartz/dartz.dart' show Either;
 import 'package:lms_app/core/cache/local_storage_service.dart';
 import 'package:lms_app/core/domain/models/user_model.dart';
+import 'package:lms_app/features/auth/domain/models/request/register_device_request.dart';
 
 import '../../../../core/cache/secure_storage_service.dart';
 import '../../../../core/domain/errors/failure.dart';
@@ -16,6 +17,7 @@ abstract class AuthRepositoryAbstraction {
   Future<void> setAccessTokenForResetPassword({String? accessToken});
   Future<void> setUserData(UserModel user);
   Future<void> clearAllTokens();
+  Future<Either<Failure, void>> registerDevice(RegisterDeviceRequest request);
 }
 
 class AuthRepository implements AuthRepositoryAbstraction {
@@ -53,7 +55,7 @@ class AuthRepository implements AuthRepositoryAbstraction {
     // If neither token is provided or both are empty, remove both from storage
     if ((accessToken == null || accessToken.isEmpty) &&
         (refreshToken == null || refreshToken.isEmpty)) {
-      _secureStorage.clearAllTokens();
+      await _secureStorage.clearAllTokens();
     }
   }
 
@@ -67,11 +69,15 @@ class AuthRepository implements AuthRepositoryAbstraction {
 
   @override
   Future<void> setUserData(UserModel user) async {
-    _localStorage.user = user;
+    await _localStorage.setUser(user);
   }
 
   @override
   Future<void> clearAllTokens() async {
     await _secureStorage.clearAllTokens();
   }
+
+  @override
+  Future<Either<Failure, void>> registerDevice(RegisterDeviceRequest request) =>
+      _remoteDataSource.registerDevice(request);
 }

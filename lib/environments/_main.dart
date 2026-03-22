@@ -1,4 +1,5 @@
-import 'package:fl_country_code_picker/fl_country_code_picker.dart' as flc;
+import 'package:fl_country_code_picker/fl_country_code_picker.dart'
+    as flc;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -68,7 +69,7 @@ class AppWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Sound Level',
+      title: 'LMS Call Center App',
       translations: AppLocalization(),
       debugShowCheckedModeBanner: false,
       locale: Locale(LocalStorageService().locale),

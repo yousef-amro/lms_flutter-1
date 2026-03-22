@@ -1,7 +1,14 @@
 enum NetworkRouter {
   // Authentication
-  login(path: '/api/auth/login/'),
-  checkUpdate(path: '/api/shared/app/version/check/'),
+  login(path: '/api/v1/auth/login'),
+  checkUpdate(path: '/api/v1/auth/check-update'),
+  registerDevice(path: '/api/v1/general/fcm/register-token'),
+
+  // Chat
+  callCenterSessions(path: '/api/v1/chat/call-center/sessions'),
+  callCenterDashboard(path: '/api/v1/chat/call-center/dashboard'),
+  closeReasonsStudent(path: '/api/v1/chat/close-reasons'),
+  chatUpload(path: '/api/v1/chat/upload'),
 
   // Dashboard
   sensors(path: '/api/my-sensors/'),

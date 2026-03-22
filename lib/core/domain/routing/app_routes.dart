@@ -2,10 +2,13 @@ abstract final class AppRoutes {
   // Auth
   static const splash = '/splash';
   static const login = '/login';
-  static const resetPassword = '/reset-password';
 
-  // Dashboard
-  static const dashboard = '/dashboard';
+  // Home
+  static const home = '/home';
+
+  // Chat
+  static const chatInbox = '/chat';
+  static const chatSession = '/chat/session';
 
   // Settings
   static const settings = '/settings';
